@@ -141,6 +141,7 @@ Ubsub::Ubsub(const char *userId, const char *userKey) {
 }
 
 bool Ubsub::connect(int timeout) {
+  this->lastPong = 0;
   uint64_t start = getTime();
   while(getTime() < start + timeout) {
     this->log("DEBUG", "Attempting connect...");
@@ -149,6 +150,9 @@ bool Ubsub::connect(int timeout) {
     uint64_t waitStart = getTime();
     while(getTime() < waitStart + 1) {
       this->receiveData();
+      if (this->lastPong > 0) {
+        return true;
+      }
     }
   }
   return false;
@@ -248,6 +252,61 @@ int Ubsub::receiveData() {
 
 void Ubsub::processPacket(uint8_t *buf, int len) {
   this->log("INFO", "Got data");
+  if (len < UBSUB_HEADER_LEN + UBSUB_CRYPTHEADER_LEN + UBSUB_SIGNATURE_LEN) {
+    this->setError("Packet too small");
+    return;
+  }
+
+  uint8_t version = buf[0];
+  if (version != 0x2 && version != 0x3) {
+    this->setError("Bad version");
+    return;
+  }
+
+  uint64_t nonce = *(uint64_t*)(buf+1);
+  char userId[17];
+  strncpy(userId, (char*)(buf+9), 16);
+
+  if (strcmp(userId, this->userId) != 0) {
+    this->setError("User mismatch");
+    return;
+  }
+
+  // Test the signature
+  Sha256.initHmac((uint8_t*)this->userKey, strlen(this->userKey));
+  Sha256.write(buf, len - UBSUB_SIGNATURE_LEN);
+  uint8_t* digest = Sha256.resultHmac();
+  uint8_t* signature = buf + len - UBSUB_SIGNATURE_LEN;
+  if (memcmp(digest, signature, 32) != 0) {
+    this->setError("Bad signature");
+    return;
+  }
+
+  // If version 0x3, need to run through cipher
+  if (version == 0x3) {
+    Sha256.init();
+    Sha256.write((uint8_t*)this->userKey, strlen(this->userKey));
+    uint8_t* expandedKey = Sha256.result();
+    s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, len - UBSUB_CRYPTHEADER_LEN - UBSUB_SIGNATURE_LEN);
+  }
+
+  uint64_t ts = *(uint64_t*)(buf + 25);
+  uint16_t cmd = *(uint16_t*)(buf + 33);
+  uint16_t bodyLen = *(uint16_t*)(buf+35);
+  uint8_t flag = *(uint8_t*)(buf+37);
+
+  uint8_t* body = buf + 38;
+
+  //TODO: Validate timestamp
+  switch(cmd) {
+    case 0x11: // Pong
+      this->log("INFO", "GOT PONG");
+      this->lastPong = getTime();
+      break;
+    default:
+      this->log("WARN", "Unknown packet");
+      break;
+  }
 }
 
 void Ubsub::ping() {
