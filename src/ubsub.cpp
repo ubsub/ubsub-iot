@@ -77,13 +77,12 @@ static int min(int left, int right) {
   return left < right ? left : right;
 }
 
-static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint8_t *body, int bodyLen) {
+static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
   if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN) {
     // Buffer too short
     return -1;
   }
 
-  uint64_t nonce = getNonce64();
   uint64_t ts = getTime();
 
   const int userIdLen = strlen(userId);
@@ -149,6 +148,8 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   this->onLog = NULL;
   this->lastPong = 0;
   this->lastPing = 0;
+  this->queue = NULL;
+  this->autoRetry = true;
   this->initSocket();
 }
 
@@ -188,7 +189,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
     memcpy(command+64, msg, msgLen);
   }
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, command, msgLen + 64);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, this->autoRetry, command, msgLen + 64);
 }
 
 void Ubsub::createTopic(const char *topicName) {
@@ -255,7 +256,22 @@ void Ubsub::processEvents() {
     this->log("WARN", "Haven't received pong.. lost connection?");
   }
 
+  // Receive and process data
   this->receiveData();
+
+  // Process queued events
+  QueuedMessage *msg = this->queue;
+  while(msg != NULL) {
+    if (now >= msg->retryTime) {
+      this->log("INFO", "Retrying message");
+      msg->retryTime = now + UNSUB_PACKET_RETRY;
+      msg->retryNumber++;
+
+      this->sendData(msg->buf, msg->bufLen);
+    }
+
+    msg = msg->next;
+  }
 }
 
 int Ubsub::receiveData() {
@@ -352,26 +368,80 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       this->lastPong = getTime();
       break;
     case CMD_MSG_ACK:
+    {
       this->log("INFO", "GOT MSG ACK");
+      if (flag & MSG_ACK_FLAG_DUPE) {
+        this->log("WARN", "Msg ack was dupe");
+      }
+      uint64_t msgNonce = *(uint64_t*)body;
+      this->removeQueue(msgNonce);
       break;
+    }
     default:
       this->setError(UBSUB_ERR_BAD_REQUEST);
       break;
   }
 }
 
+QueuedMessage* Ubsub::queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce) {
+  QueuedMessage *msg = (QueuedMessage*)malloc(sizeof(QueuedMessage));
+  if (msg == NULL) {
+    this->setError(UBSUB_ERR_MALLOC);
+    return NULL;
+  }
+
+  msg->buf = (uint8_t*)malloc(bufLen);
+  msg->bufLen = bufLen;
+  msg->retryTime = getTime() + UNSUB_PACKET_RETRY;
+  msg->retryNumber = 0;
+  msg->cancelNonce = nonce;
+  msg->next = this->queue;
+
+  memcpy(msg->buf, buf, bufLen);
+
+  this->queue = msg;
+
+  this->log("INFO", "Queued for retry");
+
+  return msg;
+}
+
+void Ubsub::removeQueue(const uint64_t &nonce) {
+  this->log("INFO", "Removing from queue");
+
+  QueuedMessage** prevNext = &this->queue;
+  QueuedMessage* msg = this->queue;
+  while(msg != NULL) {
+    if (msg->cancelNonce == nonce) {
+      this->log("INFO", "NONCE MATCHED!");
+      *prevNext = msg->next;
+      free(msg->buf);
+      free(msg);
+      break;
+    }
+
+    prevNext = &msg->next;
+    msg = msg->next;
+  }
+}
+
 void Ubsub::ping() {
   uint8_t buf[2];
   *(uint16_t*)buf = (uint16_t)this->localPort;
-  this->sendCommand(CMD_PING, 0x0, buf, 2);
+  this->sendCommand(CMD_PING, 0x0, false, buf, 2);
 }
 
-int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen) {
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen) {
   static uint8_t buf[UBSUB_MTU];
-  int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, command, commandLen);
+  uint64_t nonce = getNonce64();
+  int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, nonce, command, commandLen);
   if (plen < 0) {
     this->setError(UBSUB_ERR_SEND);
     return -1;
+  }
+
+  if (retry) {
+    this->queueMessage(buf, plen, nonce);
   }
 
   return this->sendData(buf, plen);

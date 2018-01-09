@@ -19,6 +19,7 @@ typedef void (*logCallback)(const char *level, const char* msg);
 // Configurable settings
 #define UBSUB_ERROR_BUFFER_LEN 16
 #define UBSUB_MTU 256
+#define UNSUB_PACKET_RETRY 2
 #define UBSUB_PACKET_TIMEOUT 10
 #define UBSUB_PING_FREQ 5
 #define UBSUB_CONNECTION_TIMEOUT 120
@@ -37,6 +38,16 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define UBSUB_ERR_BAD_REQUEST -11
 #define UBSUB_MISSING_ARGS -50
 #define UBSUB_ERR_UNKNOWN -1000
+#define UBSUB_ERR_MALLOC -2000
+
+typedef struct QueuedMessage {
+  uint8_t* buf;
+  int bufLen;
+  int retryTime;
+  int retryNumber;
+  uint64_t cancelNonce;
+  QueuedMessage* next;
+} QueuedMessage;
 
 class Ubsub {
 private: // Config
@@ -45,6 +56,7 @@ private: // Config
   const char* host;
   int port;
   int localPort;
+  bool autoRetry;
 
   UDPSocket sock;
   bool socketInit;
@@ -56,13 +68,15 @@ private: // State
   uint64_t lastPong;
   uint64_t lastPing;
 
+  QueuedMessage* queue;
+
 private:
   void init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort);
 
   void initSocket();
   void closeSocket();
   int sendData(const uint8_t* buf, int bufSize);
-  int sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen);
+  int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen);
 
   int receiveData();
   void processPacket(uint8_t *buf, int len);
@@ -71,6 +85,9 @@ private:
 
   void setError(int errcode);
   void log(const char* level, const char* msg);
+
+  QueuedMessage* queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce);
+  void removeQueue(const uint64_t &nonce);
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);
