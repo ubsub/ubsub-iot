@@ -48,6 +48,27 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define CMD_PING 0x10
 #define CMD_PONG 0x11
 
+#ifdef UBSUB_LOG
+#if !(ARDUINO || PARTICLE)
+  #include <iostream>
+  #include <stdarg.h>
+#endif
+
+static void log(const char* level, const char* msg, ...) {
+  static char logbuf[256];
+  va_list argptr;
+  va_start(argptr, msg);
+  vsprintf(logbuf, msg, argptr);
+  va_end(argptr);
+  #if ARDUINO || PARTICLE
+    Serial.printf("[%s] %s", level, logbuf);
+    Serial.println();
+  #else
+    std::cerr << "[" << level << "] " << logbuf << std::endl;
+  #endif
+}
+#endif
+
 // Get time in seconds
 static uint64_t getTime() {
 #if ARDUINO
@@ -145,7 +166,6 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   for (int i=0; i<UBSUB_ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = 0;
   }
-  this->onLog = NULL;
   this->lastPong = 0;
   this->lastPing = 0;
   this->queue = NULL;
@@ -157,7 +177,9 @@ bool Ubsub::connect(int timeout) {
   this->lastPong = 0;
   uint64_t start = getTime();
   while(getTime() < start + timeout) {
-    this->log("DEBUG", "Attempting connect...");
+    #ifdef UBSUB_LOG
+    log("DEBUG", "Attempting connect...");
+    #endif
     this->ping();
 
     uint64_t waitStart = getTime();
@@ -240,17 +262,9 @@ void Ubsub::setError(const int err) {
 
   char logbuf[128];
   sprintf(logbuf, "Error code: %d", err);
-  this->log("ERROR", logbuf);
-}
-
-void Ubsub::setOnLog(logCallback callback) {
-  this->onLog = callback;
-}
-
-void Ubsub::log(const char* level, const char* msg) {
-  if (this->onLog != NULL) {
-    this->onLog(level, msg);
-  }
+  #ifdef UBSUB_LOG
+  log("ERROR", logbuf);
+  #endif
 }
 
 void Ubsub::processEvents() {
@@ -263,7 +277,9 @@ void Ubsub::processEvents() {
 
   if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
     // TODO: Implement re-subscribe/re-connect
-    this->log("WARN", "Haven't received pong.. lost connection?");
+    #ifdef UBSUB_LOG
+    log("WARN", "Haven't received pong.. lost connection?");
+    #endif
   }
 
   // Receive and process data
@@ -305,7 +321,9 @@ int Ubsub::receiveData() {
 }
 
 void Ubsub::processPacket(uint8_t *buf, int len) {
-  this->log("INFO", "Got data");
+  #ifdef UBSUB_LOG
+  log("INFO", "Got %d bytes of data", len);
+  #endif
   if (len < UBSUB_HEADER_LEN + UBSUB_CRYPTHEADER_LEN + UBSUB_SIGNATURE_LEN) {
     this->setError(UBSUB_ERR_INVALID_PACKET);
     return;
@@ -363,16 +381,20 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
   switch(cmd) {
     case CMD_PONG: // Pong
-      this->log("INFO", "GOT PONG");
+      #ifdef UBSUB_LOG
+      log("DEBUG", "Got pong");
+      #endif
       this->lastPong = getTime();
       break;
     case CMD_MSG_ACK:
     {
-      this->log("INFO", "GOT MSG ACK");
-      if (flag & MSG_ACK_FLAG_DUPE) {
-        this->log("WARN", "Msg ack was dupe");
-      }
       uint64_t msgNonce = *(uint64_t*)body;
+      #ifdef UBSUB_LOG
+        log("INFO", "Got message ack for %d", msgNonce);
+        if (flag & MSG_ACK_FLAG_DUPE) {
+          log("WARN", "Msg ack was dupe");
+        }
+      #endif
       this->removeQueue(msgNonce);
       break;
     }
@@ -400,19 +422,21 @@ QueuedMessage* Ubsub::queueMessage(uint8_t* buf, int bufLen, const uint64_t &non
 
   this->queue = msg;
 
-  this->log("INFO", "Queued for retry");
+  #ifdef UBSUB_LOG
+  log("INFO", "Queued %d bytes with nonce %d for retry", bufLen, nonce);
+  #endif
 
   return msg;
 }
 
 void Ubsub::removeQueue(const uint64_t &nonce) {
-  this->log("INFO", "Removing from queue");
-
   QueuedMessage** prevNext = &this->queue;
   QueuedMessage* msg = this->queue;
   while(msg != NULL) {
     if (msg->cancelNonce == nonce) {
-      this->log("INFO", "NONCE MATCHED!");
+      #ifdef UBSUB_LOG
+      log("INFO", "Removing %d from queue", nonce);
+      #endif
       *prevNext = msg->next;
       free(msg->buf);
       free(msg);
@@ -430,14 +454,18 @@ void Ubsub::processQueue() {
   QueuedMessage *msg = this->queue;
   while(msg != NULL) {
     if (now >= msg->retryTime) {
-      this->log("INFO", "Retrying message");
+      #ifdef UBSUB_LOG
+      log("INFO", "Retrying message %d", msg->cancelNonce);
+      #endif
       msg->retryTime = now + UBSUB_PACKET_RETRY_SECONDS;
       msg->retryNumber++;
 
       this->sendData(msg->buf, msg->bufLen);
 
       if (msg->retryNumber >= UBSUB_PACKET_RETRY_ATTEMPTS) {
-        this->log("WARN", "Retried max times, timing out");
+        #ifdef UBSUB_LOG
+        log("WARN", "Retried max times, timing out");
+        #endif
         this->removeQueue(msg->cancelNonce);
         return; // Pointer is no longer valid, abort so we don't get memory issues
       }
@@ -492,12 +520,16 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
     this->sock.write(buf, bufSize);
     return this->sock.endPacket();
   #else
-    this->log("DEBUG", "Sending bytes to host...");
+    #ifdef UBSUB_LOG
+    log("DEBUG", "Sending %d bytes to host...", bufSize);
+    #endif
 
     struct hostent *server;
     server = gethostbyname(this->host);
     if (server == NULL) {
-      this->log("WARN", "Failed to resolve hostname. Connected?");
+      #ifdef UBSUB_LOG
+      log("WARN", "Failed to resolve hostname %s. Connected?", this->host);
+      #endif
       //TODO: Queue outgoing data (if required.. flag?)
       return -1;
     }

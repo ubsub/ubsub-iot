@@ -14,7 +14,6 @@
 #endif
 
 typedef void (*topicCallback)(const char* arg);
-typedef void (*logCallback)(const char *level, const char* msg);
 
 // Configurable settings
 #define UBSUB_ERROR_BUFFER_LEN 16
@@ -24,6 +23,9 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define UBSUB_PACKET_TIMEOUT 10
 #define UBSUB_PING_FREQ 5
 #define UBSUB_CONNECTION_TIMEOUT 120
+
+// If defined, will log to stderr on unix, and Serial on embedded
+#define UBSUB_LOG
 
 // Error codes
 #define UBSUB_ERR_INVALID_PACKET -1
@@ -62,7 +64,6 @@ private: // Config
   UDPSocket sock;
   bool socketInit;
 
-  logCallback onLog;
   int lastError[UBSUB_ERROR_BUFFER_LEN];
 
 private: // State
@@ -85,7 +86,6 @@ private:
   void ping();
 
   void setError(int errcode);
-  void log(const char* level, const char* msg);
 
   QueuedMessage* queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce);
   void removeQueue(const uint64_t &nonce);
@@ -129,9 +129,6 @@ public:
 
   // Gets the last error, or NULL if no error
   const int getLastError();
-
-  // Sets a function to be called when a log event occurs
-  void setOnLog(logCallback logger);
 };
 
 #endif
