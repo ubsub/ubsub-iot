@@ -22,7 +22,7 @@
   #include <fcntl.h>
 #endif
 
-const char* DEFAULT_UBSUB_ROUTER = "udp.ubsub.io";
+const char* DEFAULT_UBSUB_ROUTER = "router.ubsub.io";
 const int DEFAULT_UBSUB_PORT = 3005;
 
 // Generates outer & inner packet, running it through cryptography
@@ -163,16 +163,24 @@ bool Ubsub::connect(int timeout) {
 }
 
 
-void Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *msg) {
+int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *msg) {
+  if (topicId == NULL) {
+    return UBSUB_MISSING_ARGS;
+  }
+
   static uint8_t command[UBSUB_MTU];
   memset(command, 0, 64);
   memcpy(command, topicId, min(strlen(topicId), 32));
-  memcpy(command+32, topicKey, min(strlen(topicKey), 32));
+  if (topicKey != NULL) {
+    memcpy(command+32, topicKey, min(strlen(topicKey), 32));
+  }
 
-  int msgLen = min(strlen(msg), UBSUB_MTU-64);
-  memcpy(command+64, msg, msgLen);
+  int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-64) : 0;
+  if (msgLen > 0) {
+    memcpy(command+64, msg, msgLen);
+  }
 
-  this->sendCommand(0x0A, 0x0, command, msgLen + 64);
+  return this->sendCommand(0x0A, 0x0, command, msgLen + 64);
 }
 
 void Ubsub::createTopic(const char *topicName) {

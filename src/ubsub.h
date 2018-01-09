@@ -28,6 +28,7 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define UBSUB_ERR_NETWORK -9
 #define UBSUB_ERR_SEND -10
 #define UBSUB_ERR_BAD_REQUEST -11
+#define UBSUB_MISSING_ARGS -50
 #define UBSUB_ERR_UNKNOWN -1000
 
 class Ubsub {
@@ -73,7 +74,7 @@ public:
   // Send message to a given topic on ubsub. Topic does not have to belong
   // to the user.
   // The msg can either be serialized JSON OR a simple string that will be encapsulated on the server
-  void publishEvent(const char *topicId, const char *topicKey, const char *msg);
+  int publishEvent(const char *topicId, const char *topicKey, const char *msg);
 
   // Creates a new topic, but does NOT listen to it
   void createTopic(const char *topicName);
