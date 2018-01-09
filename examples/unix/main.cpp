@@ -15,6 +15,8 @@ int main() {
     std::cout << "Failed to connect" << std::endl;
   }
 
+  client.createTopic("testy");
+
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
 
   while(true) {

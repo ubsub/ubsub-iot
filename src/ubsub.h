@@ -19,7 +19,8 @@ typedef void (*logCallback)(const char *level, const char* msg);
 // Configurable settings
 #define UBSUB_ERROR_BUFFER_LEN 16
 #define UBSUB_MTU 256
-#define UNSUB_PACKET_RETRY 2
+#define UBSUB_PACKET_RETRY_SECONDS 2
+#define UBSUB_PACKET_RETRY_ATTEMPTS 5
 #define UBSUB_PACKET_TIMEOUT 10
 #define UBSUB_PING_FREQ 5
 #define UBSUB_CONNECTION_TIMEOUT 120
@@ -43,7 +44,7 @@ typedef void (*logCallback)(const char *level, const char* msg);
 typedef struct QueuedMessage {
   uint8_t* buf;
   int bufLen;
-  int retryTime;
+  uint64_t retryTime;
   int retryNumber;
   uint64_t cancelNonce;
   QueuedMessage* next;
@@ -88,6 +89,7 @@ private:
 
   QueuedMessage* queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce);
   void removeQueue(const uint64_t &nonce);
+  void processQueue();
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);

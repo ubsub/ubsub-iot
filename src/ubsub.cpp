@@ -193,7 +193,17 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
 }
 
 void Ubsub::createTopic(const char *topicName) {
+  const int COMMAND_LEN = 100;
+  uint8_t command[COMMAND_LEN];
+  memset(command, 0, COMMAND_LEN);
 
+  *(uint16_t*)command = this->localPort;
+  strncpy((char*)command+2, "HARDCODED_DID", 32);
+  strncpy((char*)command+34, topicName, 32);
+  strncpy((char*)command+66, "HARDCODED_SUB_ID", 32);
+  *(uint16_t*)(command+98) = 60 * 5; // Max TTL (5 minutes)
+
+  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_ACK, this->autoRetry, command, COMMAND_LEN);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, topicCallback callback) {
@@ -260,18 +270,7 @@ void Ubsub::processEvents() {
   this->receiveData();
 
   // Process queued events
-  QueuedMessage *msg = this->queue;
-  while(msg != NULL) {
-    if (now >= msg->retryTime) {
-      this->log("INFO", "Retrying message");
-      msg->retryTime = now + UNSUB_PACKET_RETRY;
-      msg->retryNumber++;
-
-      this->sendData(msg->buf, msg->bufLen);
-    }
-
-    msg = msg->next;
-  }
+  this->processQueue();
 }
 
 int Ubsub::receiveData() {
@@ -392,7 +391,7 @@ QueuedMessage* Ubsub::queueMessage(uint8_t* buf, int bufLen, const uint64_t &non
 
   msg->buf = (uint8_t*)malloc(bufLen);
   msg->bufLen = bufLen;
-  msg->retryTime = getTime() + UNSUB_PACKET_RETRY;
+  msg->retryTime = getTime() + UBSUB_PACKET_RETRY_SECONDS;
   msg->retryNumber = 0;
   msg->cancelNonce = nonce;
   msg->next = this->queue;
@@ -421,6 +420,29 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
     }
 
     prevNext = &msg->next;
+    msg = msg->next;
+  }
+}
+
+void Ubsub::processQueue() {
+  uint64_t now = getTime();
+
+  QueuedMessage *msg = this->queue;
+  while(msg != NULL) {
+    if (now >= msg->retryTime) {
+      this->log("INFO", "Retrying message");
+      msg->retryTime = now + UBSUB_PACKET_RETRY_SECONDS;
+      msg->retryNumber++;
+
+      this->sendData(msg->buf, msg->bufLen);
+
+      if (msg->retryNumber >= UBSUB_PACKET_RETRY_ATTEMPTS) {
+        this->log("WARN", "Retried max times, timing out");
+        this->removeQueue(msg->cancelNonce);
+        return; // Pointer is no longer valid, abort so we don't get memory issues
+      }
+    }
+
     msg = msg->next;
   }
 }
