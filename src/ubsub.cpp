@@ -242,7 +242,9 @@ int Ubsub::receiveData() {
 
   while (true) {
     #if ARDUINO
-      #warning
+      if (this->sock.parsePacket() > 0) {
+        rlen = this->sock.read(buf, UBSUB_MTU);
+      }
     #elif PARTICLE
       #warning
     #else
@@ -358,7 +360,13 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
   }
 
   #if ARDUINO
-  #warning
+    if (this->sock.beginPacket(this->host, this->port) != 1)
+      return -1;
+    if (this->sock.write(buf, bufSize) != bufSize)
+      return -1;
+    if (this->sock.endPacket() != 1)
+      return -1;
+    return bufSize;
   #elif PARTICLE
   #warning
   #else
@@ -392,7 +400,7 @@ void Ubsub::initSocket() {
     return;
 
   #if ARDUINO
-    #warning No implementation for arduino initSocket
+    this->sock.begin(this->localPort);
   #elif PARTICLE
     #warning No implementation of particle initSocket
   #else
@@ -427,7 +435,7 @@ void Ubsub::initSocket() {
 void Ubsub::closeSocket() {
   if (this->socketInit) {
     #if ARDUINO
-    #warning
+    this->sock.stop();
     #elif PARTICLE
     #warning
     #else
