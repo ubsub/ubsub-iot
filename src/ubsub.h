@@ -17,6 +17,19 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define ERROR_BUFFER_LEN 16
 #define UBSUB_MTU 256
 
+#define UBSUB_ERR_INVALID_PACKET -1
+#define UBSUB_ERR_BAD_VERSION -2
+#define UBSUB_ERR_USER_MISMATCH -3
+#define UBSUB_ERR_BAD_SIGNATURE -4
+#define UBSUB_ERR_TIMEOUT -5
+#define UBSUB_ERR_EXCEEDS_MTU -6
+#define UBSUB_ERR_SOCKET -7
+#define UBSUB_ERR_SOCKET_BIND -8
+#define UBSUB_ERR_NETWORK -9
+#define UBSUB_ERR_SEND -10
+#define UBSUB_ERR_BAD_REQUEST -11
+#define UBSUB_ERR_UNKNOWN -1000
+
 class Ubsub {
 private:
   const char* userId;
@@ -26,9 +39,10 @@ private:
   int localPort;
 
   UDPSocket sock;
+  bool socketInit;
 
   logCallback onLog;
-  const char *lastError[ERROR_BUFFER_LEN];
+  int lastError[ERROR_BUFFER_LEN];
 
 private:
   void initSocket();
@@ -41,7 +55,7 @@ private:
 
   void ping();
 
-  void setError(const char* err);
+  void setError(int errcode);
   void log(const char* level, const char* msg);
 
   uint64_t lastPong;
@@ -83,7 +97,7 @@ public:
   void processEvents();
 
   // Gets the last error, or NULL if no error
-  const char* getLastError();
+  const int getLastError();
 
   // Sets a function to be called when a log event occurs
   void setOnLog(logCallback logger);

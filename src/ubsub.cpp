@@ -119,9 +119,10 @@ Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int
   this->userKey = userKey;
   this->host = ubsubHost;
   this->port = ubsubPort;
+  this->socketInit = false;
   this->localPort = getNonce32() % 32768 + 32767;
   for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
-    this->lastError[i] = NULL;
+    this->lastError[i] = 0;
   }
   this->onLog = NULL;
   this->lastPong = 0;
@@ -133,9 +134,10 @@ Ubsub::Ubsub(const char *userId, const char *userKey) {
   this->userKey = userKey;
   this->host = DEFAULT_UBSUB_ROUTER;
   this->port = DEFAULT_UBSUB_PORT;
+  this->socketInit = false;
   this->localPort = getNonce32() % 32768 + 32767;
   for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
-    this->lastError[i] = NULL;
+    this->lastError[i] = 0;
   }
   this->onLog = NULL;
   this->lastPong = 0;
@@ -193,22 +195,25 @@ void Ubsub::callFunction(const char *name) {
   this->callFunction(name, NULL);
 }
 
-const char* Ubsub::getLastError() {
-  const char* err = this->lastError[0];
+const int Ubsub::getLastError() {
+  const int err = this->lastError[0];
   for (int i=0; i<ERROR_BUFFER_LEN-1; ++i) {
     this->lastError[i] = this->lastError[i+1];
   }
-  this->lastError[ERROR_BUFFER_LEN-1] = NULL;
+  this->lastError[ERROR_BUFFER_LEN-1] = 0;
   return err;
 }
 
-void Ubsub::setError(const char* err) {
+void Ubsub::setError(const int err) {
   // Shift errors up and set error at 0
   for (int i=ERROR_BUFFER_LEN-1; i>0; --i) {
     this->lastError[i] = this->lastError[i-1];
   }
   this->lastError[0] = err;
-  this->log("ERROR", err);
+
+  char logbuf[128];
+  sprintf(logbuf, "Error code: %d", err);
+  this->log("ERROR", logbuf);
 }
 
 void Ubsub::setOnLog(logCallback callback) {
@@ -255,13 +260,13 @@ int Ubsub::receiveData() {
 void Ubsub::processPacket(uint8_t *buf, int len) {
   this->log("INFO", "Got data");
   if (len < UBSUB_HEADER_LEN + UBSUB_CRYPTHEADER_LEN + UBSUB_SIGNATURE_LEN) {
-    this->setError("Packet too small");
+    this->setError(UBSUB_ERR_INVALID_PACKET);
     return;
   }
 
   uint8_t version = buf[0];
   if (version != 0x2 && version != 0x3) {
-    this->setError("Bad version");
+    this->setError(UBSUB_ERR_BAD_VERSION);
     return;
   }
 
@@ -270,7 +275,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   strncpy(userId, (char*)(buf+9), 16);
 
   if (strcmp(userId, this->userId) != 0) {
-    this->setError("User mismatch");
+    this->setError(UBSUB_ERR_USER_MISMATCH);
     return;
   }
 
@@ -280,7 +285,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   uint8_t* digest = Sha256.resultHmac();
   uint8_t* signature = buf + len - UBSUB_SIGNATURE_LEN;
   if (memcmp(digest, signature, 32) != 0) {
-    this->setError("Bad signature");
+    this->setError(UBSUB_ERR_BAD_SIGNATURE);
     return;
   }
 
@@ -302,7 +307,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   // Validate timestamp is within bounds
   int diff = (int64_t)getTime() - (int64_t)ts;
   if (diff < -UBSUB_PACKET_TIMEOUT || diff > UBSUB_PACKET_TIMEOUT) {
-    this->setError("Packet timeout");
+    this->setError(UBSUB_ERR_TIMEOUT);
     return;
   }
 
@@ -315,7 +320,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       this->lastPong = getTime();
       break;
     default:
-      this->log("WARN", "Unknown packet");
+      this->setError(UBSUB_ERR_BAD_REQUEST);
       break;
   }
 }
@@ -330,7 +335,7 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int c
   static uint8_t buf[UBSUB_MTU];
   int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, command, commandLen);
   if (plen < 0) {
-    this->setError("Error creating packet");
+    this->setError(UBSUB_ERR_SEND);
     return -1;
   }
 
@@ -339,11 +344,11 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int c
 
 int Ubsub::sendData(const uint8_t* buf, int bufSize) {
   if (bufSize > UBSUB_MTU) {
-    this->setError("Send data buffer exceeds MTU");
+    this->setError(UBSUB_ERR_EXCEEDS_MTU);
     return -1;
   }
-  if (this->sock < 0) {
-    this->setError("Socket not established");
+  if (!this->socketInit) {
+    this->setError(UBSUB_ERR_NETWORK);
     return -1;
   }
 
@@ -370,7 +375,7 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
 
     int ret = sendto(this->sock, buf, bufSize, 0, (sockaddr*)&serveraddr, sizeof(serveraddr));
     if (ret != bufSize) {
-      this->setError("Failed to send data to host");
+      this->setError(UBSUB_ERR_SEND);
       return -1;
     }
     return ret;
@@ -378,6 +383,9 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
 }
 
 void Ubsub::initSocket() {
+  if (this->socketInit)
+    return;
+
   #if ARDUINO
     #warning No implementation for arduino initSocket
   #elif PARTICLE
@@ -385,7 +393,7 @@ void Ubsub::initSocket() {
   #else
     this->sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (this->sock < 0) {
-      this->setError("Unable to create new DGRAM socket");
+      this->setError(UBSUB_ERR_SOCKET);
       return;
     }
 
@@ -396,22 +404,31 @@ void Ubsub::initSocket() {
     bindAddr.sin_port = htons(this->localPort);
 
     if (bind(this->sock, (struct sockaddr*)&bindAddr, sizeof(bindAddr)) < 0) {
-      this->setError("Error binding to local port");
+      this->setError(UBSUB_ERR_SOCKET_BIND);
       this->closeSocket();
       return;
     }
 
     if (fcntl(this->sock, F_SETFL, fcntl(this->sock, F_GETFL) | O_NONBLOCK) < 0) {
-      this->setError("Failed to put socket in non-blocking mode");
+      this->setError(UBSUB_ERR_SOCKET_BIND);
       this->closeSocket();
       return;
     }
   #endif
+
+  this->socketInit = true;
 }
 
 void Ubsub::closeSocket() {
-  if (this->sock > 0) {
-    close(this->sock);
-    this->sock = -1;
+  if (this->socketInit) {
+    #if ARDUINO
+    #warning
+    #elif PARTICLE
+    #warning
+    #else
+      close(this->sock);
+      this->sock = -1;
+    #endif
+    this->socketInit = false;
   }
 }
