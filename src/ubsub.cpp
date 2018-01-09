@@ -246,7 +246,9 @@ int Ubsub::receiveData() {
         rlen = this->sock.read(buf, UBSUB_MTU);
       }
     #elif PARTICLE
-      #warning
+      if (this->sock.parsePacket() > 0) {
+        rlen = this->sock.read(buf, UBSUB_MTU);
+      }
     #else
       struct sockaddr_in from;
       socklen_t fromlen;
@@ -368,7 +370,9 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
       return -1;
     return bufSize;
   #elif PARTICLE
-  #warning
+    this->sock.beginPacket(this->host, this->port);
+    this->sock.write(buf, bufSize);
+    return this->sock.endPacket();
   #else
     this->log("DEBUG", "Sending bytes to host...");
 
@@ -402,7 +406,8 @@ void Ubsub::initSocket() {
   #if ARDUINO
     this->sock.begin(this->localPort);
   #elif PARTICLE
-    #warning No implementation of particle initSocket
+    this->sock.begin(this->localPort);
+    this->sock.setBuffer(UBSUB_MTU);
   #else
     this->sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (this->sock < 0) {
@@ -435,9 +440,9 @@ void Ubsub::initSocket() {
 void Ubsub::closeSocket() {
   if (this->socketInit) {
     #if ARDUINO
-    this->sock.stop();
+      this->sock.stop();
     #elif PARTICLE
-    #warning
+      this->sock.stop();
     #else
       close(this->sock);
       this->sock = -1;
