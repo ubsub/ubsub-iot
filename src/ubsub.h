@@ -20,6 +20,8 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define UBSUB_ERROR_BUFFER_LEN 16
 #define UBSUB_MTU 256
 #define UBSUB_PACKET_TIMEOUT 10
+#define UBSUB_PING_FREQ 5
+#define UBSUB_CONNECTION_TIMEOUT 120
 
 // Error codes
 #define UBSUB_ERR_INVALID_PACKET -1
@@ -37,7 +39,7 @@ typedef void (*logCallback)(const char *level, const char* msg);
 #define UBSUB_ERR_UNKNOWN -1000
 
 class Ubsub {
-private:
+private: // Config
   const char* userId;
   const char* userKey;
   const char* host;
@@ -50,7 +52,13 @@ private:
   logCallback onLog;
   int lastError[UBSUB_ERROR_BUFFER_LEN];
 
+private: // State
+  uint64_t lastPong;
+  uint64_t lastPing;
+
 private:
+  void init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort);
+
   void initSocket();
   void closeSocket();
   int sendData(const uint8_t* buf, int bufSize);
@@ -63,8 +71,6 @@ private:
 
   void setError(int errcode);
   void log(const char* level, const char* msg);
-
-  uint64_t lastPong;
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);

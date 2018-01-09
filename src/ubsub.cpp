@@ -31,6 +31,23 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define UBSUB_SIGNATURE_LEN 32
 #define USER_ID_MAX_LEN 16
 
+#define MSG_FLAG_ACK 0x1
+#define MSG_ACK_FLAG_DUPE 0x1
+
+#define SUB_FLAG_ACK 0x1
+#define SUB_FLAG_UNWRAP 0x2
+
+#define CMD_SUB 0x1
+#define CMD_ACK 0x2
+#define CMD_UNSUB 0x3
+#define CMD_UNSUB_ACK 0x4
+#define CMD_SUB_MSG 0x5
+#define CMD_SUB_MSG_ACK 0x6
+#define CMD_MSG 0xA
+#define CMD_MSG_ACK 0xB
+#define CMD_PING 0x10
+#define CMD_PONG 0x11
+
 // Get time in seconds
 static uint64_t getTime() {
 #if ARDUINO
@@ -112,6 +129,14 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
 // Ubsub Implementation
 
 Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort) {
+  this->init(userId, userKey, ubsubHost, ubsubPort);
+}
+
+Ubsub::Ubsub(const char *userId, const char *userKey) {
+  this->init(userId, userKey, DEFAULT_UBSUB_ROUTER, DEFAULT_UBSUB_PORT);
+}
+
+void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort) {
   this->userId = userId;
   this->userKey = userKey;
   this->host = ubsubHost;
@@ -123,21 +148,7 @@ Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int
   }
   this->onLog = NULL;
   this->lastPong = 0;
-  this->initSocket();
-}
-
-Ubsub::Ubsub(const char *userId, const char *userKey) {
-  this->userId = userId;
-  this->userKey = userKey;
-  this->host = DEFAULT_UBSUB_ROUTER;
-  this->port = DEFAULT_UBSUB_PORT;
-  this->socketInit = false;
-  this->localPort = getNonce32() % 32768 + 32767;
-  for (int i=0; i<UBSUB_ERROR_BUFFER_LEN; ++i) {
-    this->lastError[i] = 0;
-  }
-  this->onLog = NULL;
-  this->lastPong = 0;
+  this->lastPing = 0;
   this->initSocket();
 }
 
@@ -177,7 +188,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
     memcpy(command+64, msg, msgLen);
   }
 
-  return this->sendCommand(0x0A, 0x0, command, msgLen + 64);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, command, msgLen + 64);
 }
 
 void Ubsub::createTopic(const char *topicName) {
@@ -232,6 +243,18 @@ void Ubsub::log(const char* level, const char* msg) {
 }
 
 void Ubsub::processEvents() {
+  // Send ping if necessary
+  uint64_t now = getTime();
+  if (now - this->lastPing >= UBSUB_PING_FREQ) {
+    this->lastPing = now;
+    this->ping();
+  }
+
+  if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
+    // TODO: Implement re-subscribe/re-connect
+    this->log("WARN", "Haven't received pong.. lost connection?");
+  }
+
   this->receiveData();
 }
 
@@ -324,9 +347,12 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
 
   switch(cmd) {
-    case 0x11: // Pong
+    case CMD_PONG: // Pong
       this->log("INFO", "GOT PONG");
       this->lastPong = getTime();
+      break;
+    case CMD_MSG_ACK:
+      this->log("INFO", "GOT MSG ACK");
       break;
     default:
       this->setError(UBSUB_ERR_BAD_REQUEST);
@@ -337,7 +363,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 void Ubsub::ping() {
   uint8_t buf[2];
   *(uint16_t*)buf = (uint16_t)this->localPort;
-  this->sendCommand(0x10, 0x0, buf, 2);
+  this->sendCommand(CMD_PING, 0x0, buf, 2);
 }
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen) {

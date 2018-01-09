@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unistd.h>
 #include "../../src/ubsub.h"
 
 void onLog(const char* level, const char* msg) {
@@ -15,6 +16,11 @@ int main() {
   }
 
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
+
+  while(true) {
+    client.processEvents();
+    usleep(5 * 1000);
+  }
 
   return 0;
 }
