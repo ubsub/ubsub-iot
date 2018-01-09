@@ -16,7 +16,7 @@ static void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t 
   *y0 = *y0 ^ rotl(*y3 + *y2, 18);
 }
 
-static void s20_rowround(uint32_t y[static 16])
+static void s20_rowround(uint32_t y[16])
 {
   s20_quarterround(&y[0], &y[1], &y[2], &y[3]);
   s20_quarterround(&y[5], &y[6], &y[7], &y[4]);
@@ -24,7 +24,7 @@ static void s20_rowround(uint32_t y[static 16])
   s20_quarterround(&y[15], &y[12], &y[13], &y[14]);
 }
 
-static void s20_columnround(uint32_t x[static 16])
+static void s20_columnround(uint32_t x[16])
 {
   s20_quarterround(&x[0], &x[4], &x[8], &x[12]);
   s20_quarterround(&x[5], &x[9], &x[13], &x[1]);
@@ -32,7 +32,7 @@ static void s20_columnround(uint32_t x[static 16])
   s20_quarterround(&x[15], &x[3], &x[7], &x[11]);
 }
 
-static void s20_doubleround(uint32_t x[static 16])
+static void s20_doubleround(uint32_t x[16])
 {
   s20_columnround(x);
   s20_rowround(x);
@@ -57,7 +57,7 @@ static void s20_rev_littleendian(uint8_t *b, uint32_t w)
 }
 
 // The core function of Salsa20
-static void s20_hash(uint8_t seq[static 64])
+static void s20_hash(uint8_t seq[64])
 {
   int i;
   uint32_t x[16];
@@ -80,8 +80,8 @@ static void s20_hash(uint8_t seq[static 64])
 
 // The 16-byte (128-bit) key expansion function
 static void s20_expand16(uint8_t *k,
-                         uint8_t n[static 16],
-                         uint8_t keystream[static 64])
+                         uint8_t n[16],
+                         uint8_t keystream[64])
 {
   int i, j;
   // The constants specified by the Salsa20 specification, 'tau'
@@ -111,8 +111,8 @@ static void s20_expand16(uint8_t *k,
 
 // The 32-byte (256-bit) key expansion function
 static void s20_expand32(uint8_t *k,
-                         uint8_t n[static 16],
-                         uint8_t keystream[static 64])
+                         uint8_t n[16],
+                         uint8_t keystream[64])
 {
   int i, j;
   // The constants specified by the Salsa20 specification, 'sigma'
@@ -144,7 +144,7 @@ static void s20_expand32(uint8_t *k,
 // 128- or 256-bit key and 64-byte nonce.
 enum s20_status_t s20_crypt(uint8_t *key,
                             enum s20_keylen_t keylen,
-                            uint8_t nonce[static 8],
+                            uint8_t nonce[8],
                             uint32_t si,
                             uint8_t *buf,
                             uint32_t buflen)

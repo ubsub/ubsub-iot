@@ -59,7 +59,7 @@ enum s20_keylen_t
  */
 enum s20_status_t s20_crypt(uint8_t *key,
                             enum s20_keylen_t keylen,
-                            uint8_t nonce[static 8],
+                            uint8_t nonce[8],
                             uint32_t si,
                             uint8_t *buf,
                             uint32_t buflen);
