@@ -4,8 +4,10 @@
 #define ubsub_h
 
 #if ARDUINO
+  #include <WiFiUdp.h>
   typedef WiFiUDP UDPSocket;
 #elif PARTICLE
+  #include <Particle.h>
   typedef UDP UDPSocket;
 #else
   typedef int UDPSocket;
@@ -14,9 +16,12 @@
 typedef void (*topicCallback)(const char* arg);
 typedef void (*logCallback)(const char *level, const char* msg);
 
-#define ERROR_BUFFER_LEN 16
+// Configurable settings
+#define UBSUB_ERROR_BUFFER_LEN 16
 #define UBSUB_MTU 256
+#define UBSUB_PACKET_TIMEOUT 10
 
+// Error codes
 #define UBSUB_ERR_INVALID_PACKET -1
 #define UBSUB_ERR_BAD_VERSION -2
 #define UBSUB_ERR_USER_MISMATCH -3
@@ -43,7 +48,7 @@ private:
   bool socketInit;
 
   logCallback onLog;
-  int lastError[ERROR_BUFFER_LEN];
+  int lastError[UBSUB_ERROR_BUFFER_LEN];
 
 private:
   void initSocket();

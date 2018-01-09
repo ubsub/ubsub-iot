@@ -29,10 +29,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define UBSUB_CRYPTHEADER_LEN 25
 #define UBSUB_HEADER_LEN 13
 #define UBSUB_SIGNATURE_LEN 32
-
 #define USER_ID_MAX_LEN 16
-
-#define UBSUB_PACKET_TIMEOUT 10
 
 // Get time in seconds
 static uint64_t getTime() {
@@ -121,7 +118,7 @@ Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int
   this->port = ubsubPort;
   this->socketInit = false;
   this->localPort = getNonce32() % 32768 + 32767;
-  for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
+  for (int i=0; i<UBSUB_ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = 0;
   }
   this->onLog = NULL;
@@ -136,7 +133,7 @@ Ubsub::Ubsub(const char *userId, const char *userKey) {
   this->port = DEFAULT_UBSUB_PORT;
   this->socketInit = false;
   this->localPort = getNonce32() % 32768 + 32767;
-  for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
+  for (int i=0; i<UBSUB_ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = 0;
   }
   this->onLog = NULL;
@@ -205,16 +202,16 @@ void Ubsub::callFunction(const char *name) {
 
 const int Ubsub::getLastError() {
   const int err = this->lastError[0];
-  for (int i=0; i<ERROR_BUFFER_LEN-1; ++i) {
+  for (int i=0; i<UBSUB_ERROR_BUFFER_LEN-1; ++i) {
     this->lastError[i] = this->lastError[i+1];
   }
-  this->lastError[ERROR_BUFFER_LEN-1] = 0;
+  this->lastError[UBSUB_ERROR_BUFFER_LEN-1] = 0;
   return err;
 }
 
 void Ubsub::setError(const int err) {
   // Shift errors up and set error at 0
-  for (int i=ERROR_BUFFER_LEN-1; i>0; --i) {
+  for (int i=UBSUB_ERROR_BUFFER_LEN-1; i>0; --i) {
     this->lastError[i] = this->lastError[i-1];
   }
   this->lastError[0] = err;
