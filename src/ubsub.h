@@ -15,7 +15,7 @@ typedef void (*topicCallback)(const char* arg);
 typedef void (*logCallback)(const char *level, const char* msg);
 
 #define ERROR_BUFFER_LEN 16
-#define UBSUB_MTU 2048
+#define UBSUB_MTU 256
 
 class Ubsub {
 private:
@@ -23,6 +23,7 @@ private:
   const char* userKey;
   const char* host;
   int port;
+  int localPort;
 
   UDPSocket sock;
 
@@ -32,10 +33,18 @@ private:
 private:
   void initSocket();
   void closeSocket();
-  void sendData(const uint8_t* buf, int bufSize);
+  int sendData(const uint8_t* buf, int bufSize);
+  int sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen);
+
+  int receiveData();
+  void processPacket(uint8_t *buf, int len);
+
+  void ping();
 
   void setError(const char* err);
   void log(const char* level, const char* msg);
+
+  uint64_t lastPong;
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);

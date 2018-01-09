@@ -19,6 +19,7 @@
   #include <netdb.h>
   #include <unistd.h>
   #include <math.h>
+  #include <fcntl.h>
 #endif
 
 const char* DEFAULT_UBSUB_ROUTER = "udp.ubsub.io";
@@ -89,7 +90,9 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
   *(uint8_t*)(buf+37) = flag;
 
   // Copy body to buffer
-  memcpy(buf+38, body, bodyLen);
+  if (body != NULL && bodyLen > 0) {
+    memcpy(buf+38, body, bodyLen);
+  }
 
   // Run the body though the cipher
   Sha256.init();
@@ -114,10 +117,12 @@ Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int
   this->userKey = userKey;
   this->host = ubsubHost;
   this->port = ubsubPort;
+  this->localPort = getNonce32() % 32768 + 32767;
   for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = NULL;
   }
   this->onLog = NULL;
+  this->lastPong = 0;
   this->initSocket();
 }
 
@@ -126,36 +131,40 @@ Ubsub::Ubsub(const char *userId, const char *userKey) {
   this->userKey = userKey;
   this->host = DEFAULT_UBSUB_ROUTER;
   this->port = DEFAULT_UBSUB_PORT;
+  this->localPort = getNonce32() % 32768 + 32767;
   for (int i=0; i<ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = NULL;
   }
   this->onLog = NULL;
+  this->lastPong = 0;
   this->initSocket();
 }
 
 bool Ubsub::connect(int timeout) {
-  this->log("DEBUG", "Attempting connect...");
+  uint64_t start = getTime();
+  while(getTime() < start + timeout) {
+    this->log("DEBUG", "Attempting connect...");
+    this->ping();
+
+    uint64_t waitStart = getTime();
+    while(getTime() < waitStart + 1) {
+      this->receiveData();
+    }
+  }
   return false;
 }
 
 
 void Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *msg) {
-  static uint8_t command[1024+64];
+  static uint8_t command[UBSUB_MTU];
   memset(command, 0, 64);
   memcpy(command, topicId, min(strlen(topicId), 32));
   memcpy(command+32, topicKey, min(strlen(topicKey), 32));
 
-  int msgLen = min(strlen(msg), 1024);
+  int msgLen = min(strlen(msg), UBSUB_MTU-64);
   memcpy(command+64, msg, msgLen);
 
-  static uint8_t buf[UBSUB_MTU];
-  int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, 0x0A, 0x0, command, msgLen+64);
-  if (plen < 0) {
-    this->setError("Error creating packet");
-    return;
-  }
-
-  this->sendData(buf, plen);
+  this->sendCommand(0x0A, 0x0, command, msgLen + 64);
 }
 
 void Ubsub::createTopic(const char *topicName) {
@@ -207,17 +216,65 @@ void Ubsub::log(const char* level, const char* msg) {
 }
 
 void Ubsub::processEvents() {
-
+  this->receiveData();
 }
 
-void Ubsub::sendData(const uint8_t* buf, int bufSize) {
+int Ubsub::receiveData() {
+  static uint8_t buf[UBSUB_MTU];
+  int received = 0;
+  int rlen = 0;
+
+  while (true) {
+    #if ARDUINO
+      #warning
+    #elif PARTICLE
+      #warning
+    #else
+      struct sockaddr_in from;
+      socklen_t fromlen;
+      rlen = recvfrom(this->sock, buf, UBSUB_MTU, 0x0, (struct sockaddr*)&from, &fromlen);
+    #endif
+
+    if (rlen <= 0)
+      break;
+
+    this->processPacket(buf, rlen);
+
+    received++;
+  }
+
+  return received;
+}
+
+void Ubsub::processPacket(uint8_t *buf, int len) {
+  this->log("INFO", "Got data");
+}
+
+void Ubsub::ping() {
+  uint8_t buf[2];
+  *(uint16_t*)buf = (uint16_t)this->localPort;
+  this->sendCommand(0x10, 0x0, buf, 2);
+}
+
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen) {
+  static uint8_t buf[UBSUB_MTU];
+  int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, command, commandLen);
+  if (plen < 0) {
+    this->setError("Error creating packet");
+    return -1;
+  }
+
+  return this->sendData(buf, plen);
+}
+
+int Ubsub::sendData(const uint8_t* buf, int bufSize) {
   if (bufSize > UBSUB_MTU) {
     this->setError("Send data buffer exceeds MTU");
-    return;
+    return -1;
   }
   if (this->sock < 0) {
     this->setError("Socket not established");
-    return;
+    return -1;
   }
 
   #if ARDUINO
@@ -232,7 +289,7 @@ void Ubsub::sendData(const uint8_t* buf, int bufSize) {
     if (server == NULL) {
       this->log("WARN", "Failed to resolve hostname. Connected?");
       //TODO: Queue outgoing data (if required.. flag?)
-      return;
+      return -1;
     }
 
     struct sockaddr_in serveraddr;
@@ -244,8 +301,9 @@ void Ubsub::sendData(const uint8_t* buf, int bufSize) {
     int ret = sendto(this->sock, buf, bufSize, 0, (sockaddr*)&serveraddr, sizeof(serveraddr));
     if (ret != bufSize) {
       this->setError("Failed to send data to host");
-      return;
+      return -1;
     }
+    return ret;
   #endif
 }
 
@@ -265,11 +323,16 @@ void Ubsub::initSocket() {
     memset((char*)&bindAddr, 0, sizeof(bindAddr));
     bindAddr.sin_family = AF_INET;
     bindAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    // bindAddr.sin_port = htons(this->port); // TODO: Do i need this? Anyport?
-    bindAddr.sin_port = 0; //anyport
+    bindAddr.sin_port = htons(this->localPort);
 
     if (bind(this->sock, (struct sockaddr*)&bindAddr, sizeof(bindAddr)) < 0) {
       this->setError("Error binding to local port");
+      this->closeSocket();
+      return;
+    }
+
+    if (fcntl(this->sock, F_SETFL, fcntl(this->sock, F_GETFL) | O_NONBLOCK) < 0) {
+      this->setError("Failed to put socket in non-blocking mode");
       this->closeSocket();
       return;
     }
