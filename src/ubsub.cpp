@@ -32,6 +32,8 @@ const int DEFAULT_UBSUB_PORT = 3005;
 
 #define USER_ID_MAX_LEN 16
 
+#define UBSUB_PACKET_TIMEOUT 10
+
 // Get time in seconds
 static uint64_t getTime() {
 #if ARDUINO
@@ -297,7 +299,16 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
   uint8_t* body = buf + 38;
 
-  //TODO: Validate timestamp
+  // Validate timestamp is within bounds
+  int diff = (int64_t)getTime() - (int64_t)ts;
+  if (diff < -UBSUB_PACKET_TIMEOUT || diff > UBSUB_PACKET_TIMEOUT) {
+    this->setError("Packet timeout");
+    return;
+  }
+
+  //TODO: Validate Nonce hasn't already been used (dupe)
+
+
   switch(cmd) {
     case 0x11: // Pong
       this->log("INFO", "GOT PONG");
