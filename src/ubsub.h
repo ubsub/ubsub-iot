@@ -116,8 +116,8 @@ public:
   void createFunction(const char *name, topicCallback callback);
 
   // Call function on another device
-  void callFunction(const char *name, const char *arg);
-  void callFunction(const char *name);
+  int callFunction(const char *name, const char *arg);
+  int callFunction(const char *name);
 
   // processEvents() needs to be called frequently.  It takes care of things such as:
   // - Re-sending any queued outbound messages

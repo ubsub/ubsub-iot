@@ -204,12 +204,12 @@ void Ubsub::createFunction(const char *name, topicCallback callback) {
 
 }
 
-void Ubsub::callFunction(const char *name, const char *arg) {
-
+int Ubsub::callFunction(const char *name, const char *arg) {
+  return this->publishEvent(name, NULL, arg);
 }
 
-void Ubsub::callFunction(const char *name) {
-  this->callFunction(name, NULL);
+int Ubsub::callFunction(const char *name) {
+  return this->callFunction(name, NULL);
 }
 
 const int Ubsub::getLastError() {
