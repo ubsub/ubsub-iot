@@ -23,6 +23,7 @@ typedef void (*topicCallback)(const char* arg);
 #define UBSUB_PACKET_TIMEOUT 10
 #define UBSUB_PING_FREQ 30
 #define UBSUB_CONNECTION_TIMEOUT 120
+#define UBSUB_SUBSCRIPTION_TTL 60*5 // 5 minutes
 #define UBSUB_NONCE_RR_COUNT 32 // Number of nonces to track
 
 // If defined, will log to stderr on unix, and Serial on embedded
