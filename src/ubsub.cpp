@@ -36,6 +36,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
 
 #define SUB_FLAG_ACK 0x1
 #define SUB_FLAG_UNWRAP 0x2
+#define SUB_FLAG_MSG_NEED_ACK 0x4
 
 #define CMD_SUB 0x1
 #define CMD_ACK 0x2
