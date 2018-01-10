@@ -389,15 +389,27 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
   switch(cmd) {
     case CMD_PONG: // Pong
+    {
+      if (bodyLen < 8) {
+        this->setError(UBSUB_ERR_BAD_REQUEST);
+        return;
+      }
       #ifdef UBSUB_LOG
-      log("DEBUG", "Got pong");
+      uint64_t pingTime = *(uint64_t*)body;
+      int64_t roundTrip = (int64_t)now - (int64_t)pingTime;
+      log("DEBUG", "Got pong. Round trip secs: %d", roundTrip);
       #endif
       if (now > this->lastPong) {
         this->lastPong = now;
       }
       break;
+    }
     case CMD_MSG_ACK:
     {
+      if (bodyLen < 8) {
+        this->setError(UBSUB_ERR_BAD_REQUEST);
+        return;
+      }
       uint64_t msgNonce = *(uint64_t*)body;
       #ifdef UBSUB_LOG
         log("INFO", "Got message ack for %d", msgNonce);
