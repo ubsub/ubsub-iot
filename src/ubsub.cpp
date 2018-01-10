@@ -71,82 +71,11 @@ const int DEFAULT_UBSUB_PORT = 3005;
   }
 #endif
 
-// Get time in seconds
-static uint64_t getTime() {
-#if ARDUINO
-  return (uint64_t)(millis() / 1000);
-#elif PARTICLE
-  return Time.now();
-#else
-  return std::time(NULL);
-#endif
-}
-
-// Get random nonce
-static uint32_t getNonce32() {
-#if ARDUINO || PARTICLE
-  return (random(256) << 24) | (random(256) << 16) | (random(256) << 8) | random(256);
-#else
-  srand(getTime()); //FIXME: This isn't great
-  return (uint32_t)rand() + (uint32_t)rand();
-#endif
-}
-
-static uint64_t getNonce64() {
-  return (uint64_t)getNonce32() << 32 | getNonce32();
-}
-
-static int min(int left, int right) {
-  return left < right ? left : right;
-}
-
-static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
-  if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN) {
-    // Buffer too short
-    return -1;
-  }
-
-  uint64_t ts = getTime();
-
-  const int userIdLen = strlen(userId);
-  if (userIdLen > USER_ID_MAX_LEN) {
-    return -2;
-  }
-
-  // Zero the buffer
-  memset(buf, 0, bufSize);
-
-  // Set up CrpyHeader
-  buf[0] = 0x3; // UDPv3 (encrypted with salsa20)
-  *(uint64_t*)(buf+1) = nonce; // 64 bit nonce
-  memcpy(buf+9, userId, userIdLen);
-
-  // Set header
-  *(uint64_t*)(buf+25) = ts;
-  *(uint16_t*)(buf+33) = cmd;
-  *(uint16_t*)(buf+35) = (uint16_t)bodyLen;
-  *(uint8_t*)(buf+37) = flag;
-
-  // Copy body to buffer
-  if (body != NULL && bodyLen > 0) {
-    memcpy(buf+38, body, bodyLen);
-  }
-
-  // Run the body though the cipher
-  Sha256.init();
-  Sha256.write((uint8_t*)key, strlen(key));
-  uint8_t* expandedKey = Sha256.result();
-  s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, UBSUB_HEADER_LEN + bodyLen);
-
-  // Sign the entire thing
-  Sha256.initHmac((uint8_t*)key, strlen(key));
-  Sha256.write(buf, UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen);
-  uint8_t* digest = Sha256.resultHmac();
-  memcpy(buf + UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen, digest, 32);
-
-  return UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN;
-}
-
+static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
+static uint64_t getTime();
+static uint32_t getNonce32();
+static uint64_t getNonce64();
+static int min(int left, int right);
 
 // Ubsub Implementation
 
@@ -259,17 +188,6 @@ const int Ubsub::getLastError() {
   return err;
 }
 
-void Ubsub::setError(const int err) {
-  // Shift errors up and set error at 0
-  for (int i=UBSUB_ERROR_BUFFER_LEN-1; i>0; --i) {
-    this->lastError[i] = this->lastError[i-1];
-  }
-  this->lastError[0] = err;
-  #ifdef UBSUB_LOG
-  log("ERROR", "Error code: %d", err);
-  #endif
-}
-
 void Ubsub::processEvents() {
   // Send ping if necessary
   uint64_t now = getTime();
@@ -292,35 +210,21 @@ void Ubsub::processEvents() {
   this->processQueue();
 }
 
-int Ubsub::receiveData() {
-  static uint8_t buf[UBSUB_MTU];
-  int received = 0;
-  int rlen = 0;
 
-  while (true) {
-    #if ARDUINO
-      if (this->sock.parsePacket() > 0) {
-        rlen = this->sock.read(buf, UBSUB_MTU);
-      }
-    #elif PARTICLE
-      if (this->sock.parsePacket() > 0) {
-        rlen = this->sock.read(buf, UBSUB_MTU);
-      }
-    #else
-      struct sockaddr_in from;
-      socklen_t fromlen;
-      rlen = recvfrom(this->sock, buf, UBSUB_MTU, 0x0, (struct sockaddr*)&from, &fromlen);
-    #endif
 
-    if (rlen <= 0)
-      break;
 
-    this->processPacket(buf, rlen);
 
-    received++;
+// PRIVATE methods
+
+void Ubsub::setError(const int err) {
+  // Shift errors up and set error at 0
+  for (int i=UBSUB_ERROR_BUFFER_LEN-1; i>0; --i) {
+    this->lastError[i] = this->lastError[i-1];
   }
-
-  return received;
+  this->lastError[0] = err;
+  #ifdef UBSUB_LOG
+  log("ERROR", "Error code: %d", err);
+  #endif
 }
 
 void Ubsub::processPacket(uint8_t *buf, int len) {
@@ -537,6 +441,41 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *co
   return this->sendData(buf, plen);
 }
 
+
+
+// PRIVATE multiplatform socket code
+
+int Ubsub::receiveData() {
+  static uint8_t buf[UBSUB_MTU];
+  int received = 0;
+  int rlen = 0;
+
+  while (true) {
+    #if ARDUINO
+      if (this->sock.parsePacket() > 0) {
+        rlen = this->sock.read(buf, UBSUB_MTU);
+      }
+    #elif PARTICLE
+      if (this->sock.parsePacket() > 0) {
+        rlen = this->sock.read(buf, UBSUB_MTU);
+      }
+    #else
+      struct sockaddr_in from;
+      socklen_t fromlen;
+      rlen = recvfrom(this->sock, buf, UBSUB_MTU, 0x0, (struct sockaddr*)&from, &fromlen);
+    #endif
+
+    if (rlen <= 0)
+      break;
+
+    this->processPacket(buf, rlen);
+
+    received++;
+  }
+
+  return received;
+}
+
 int Ubsub::sendData(const uint8_t* buf, int bufSize) {
   if (bufSize > UBSUB_MTU) {
     this->setError(UBSUB_ERR_EXCEEDS_MTU);
@@ -639,4 +578,83 @@ void Ubsub::closeSocket() {
     #endif
     this->socketInit = false;
   }
+}
+
+static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
+  if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN) {
+    // Buffer too short
+    return -1;
+  }
+
+  uint64_t ts = getTime();
+
+  const int userIdLen = strlen(userId);
+  if (userIdLen > USER_ID_MAX_LEN) {
+    return -2;
+  }
+
+  // Zero the buffer
+  memset(buf, 0, bufSize);
+
+  // Set up CrpyHeader
+  buf[0] = 0x3; // UDPv3 (encrypted with salsa20)
+  *(uint64_t*)(buf+1) = nonce; // 64 bit nonce
+  memcpy(buf+9, userId, userIdLen);
+
+  // Set header
+  *(uint64_t*)(buf+25) = ts;
+  *(uint16_t*)(buf+33) = cmd;
+  *(uint16_t*)(buf+35) = (uint16_t)bodyLen;
+  *(uint8_t*)(buf+37) = flag;
+
+  // Copy body to buffer
+  if (body != NULL && bodyLen > 0) {
+    memcpy(buf+38, body, bodyLen);
+  }
+
+  // Run the body though the cipher
+  Sha256.init();
+  Sha256.write((uint8_t*)key, strlen(key));
+  uint8_t* expandedKey = Sha256.result();
+  s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, UBSUB_HEADER_LEN + bodyLen);
+
+  // Sign the entire thing
+  Sha256.initHmac((uint8_t*)key, strlen(key));
+  Sha256.write(buf, UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen);
+  uint8_t* digest = Sha256.resultHmac();
+  memcpy(buf + UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen, digest, 32);
+
+  return UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN;
+}
+
+
+// STATIC HELPERS ===============
+
+// Get time in seconds
+static uint64_t getTime() {
+#if ARDUINO
+  return (uint64_t)(millis() / 1000);
+#elif PARTICLE
+  return Time.now();
+#else
+  return std::time(NULL);
+#endif
+}
+
+// Get random nonce
+static uint32_t getNonce32() {
+#if ARDUINO || PARTICLE
+  return (random(256) << 24) | (random(256) << 16) | (random(256) << 8) | random(256);
+#else
+  srand(getTime()); //FIXME: This isn't great
+  return (uint32_t)rand() + (uint32_t)rand();
+#endif
+}
+
+static uint64_t getNonce64() {
+  return (uint64_t)getNonce32() << 32 | getNonce32();
+}
+
+static int min(int left, int right) {
+  return left < right ? left : right;
 }
