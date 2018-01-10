@@ -231,7 +231,7 @@ void Ubsub::createTopic(const char *topicName) {
   strncpy((char*)command+66, "HARDCODED_SUB_ID", 32);
   *(uint16_t*)(command+98) = 60 * 5; // Max TTL (5 minutes)
 
-  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_ACK, this->autoRetry, command, COMMAND_LEN);
+  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP, this->autoRetry, command, COMMAND_LEN);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, topicCallback callback) {
