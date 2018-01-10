@@ -261,11 +261,8 @@ void Ubsub::setError(const int err) {
     this->lastError[i] = this->lastError[i-1];
   }
   this->lastError[0] = err;
-
-  char logbuf[128];
-  sprintf(logbuf, "Error code: %d", err);
   #ifdef UBSUB_LOG
-  log("ERROR", logbuf);
+  log("ERROR", "Error code: %d", err);
   #endif
 }
 

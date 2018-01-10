@@ -91,7 +91,7 @@ private:
 
   void setError(int errcode);
 
-  QueuedMessage* queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce);
+  QueuedMessage* queueMessage(const uint8_t* buf, int bufLen, const uint64_t &nonce);
   void removeQueue(const uint64_t &nonce);
   void processQueue();
 
