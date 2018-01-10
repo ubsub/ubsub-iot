@@ -168,6 +168,10 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   for (int i=0; i<UBSUB_ERROR_BUFFER_LEN; ++i) {
     this->lastError[i] = 0;
   }
+  for (int i=0; i<UBSUB_NONCE_RR_COUNT; ++i) {
+    this->rrnonce[i] = 0;
+  }
+  this->lastNonceIdx = 0;
   this->lastPong = 0;
   this->lastPing = 0;
   this->queue = NULL;
@@ -343,6 +347,13 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     return;
   }
 
+  //Validate Nonce hasn't already been used (dupe)
+  if (this->hasNonce(nonce)) {
+    this->setError(UBSUB_ERR_NONCE_DUPE);
+    return;
+  }
+  this->writeNonce(nonce);
+
   // Test the signature
   Sha256.initHmac((uint8_t*)this->userKey, strlen(this->userKey));
   Sha256.write(buf, len - UBSUB_SIGNATURE_LEN);
@@ -375,9 +386,6 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     this->setError(UBSUB_ERR_TIMEOUT);
     return;
   }
-
-  //TODO: Validate Nonce hasn't already been used (dupe)
-
 
   switch(cmd) {
     case CMD_PONG: // Pong
@@ -480,6 +488,19 @@ void Ubsub::processQueue() {
 
     msg = msg->next;
   }
+}
+
+void Ubsub::writeNonce(const uint64_t &nonce) {
+  this->rrnonce[this->lastNonceIdx] = nonce;
+  this->lastNonceIdx = (this->lastNonceIdx + 1) % UBSUB_NONCE_RR_COUNT;
+}
+
+bool Ubsub::hasNonce(const uint64_t &nonce) {
+  for (int i=0; i<UBSUB_NONCE_RR_COUNT; ++i) {
+    if (this->rrnonce[i] == nonce)
+      return true;
+  }
+  return false;
 }
 
 void Ubsub::ping() {

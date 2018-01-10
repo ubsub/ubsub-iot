@@ -21,8 +21,9 @@ typedef void (*topicCallback)(const char* arg);
 #define UBSUB_PACKET_RETRY_SECONDS 2
 #define UBSUB_PACKET_RETRY_ATTEMPTS 5
 #define UBSUB_PACKET_TIMEOUT 10
-#define UBSUB_PING_FREQ 5
+#define UBSUB_PING_FREQ 30
 #define UBSUB_CONNECTION_TIMEOUT 120
+#define UBSUB_NONCE_RR_COUNT 32 // Number of nonces to track
 
 // If defined, will log to stderr on unix, and Serial on embedded
 // Not enabled by default on embedded, but feel free to enable!
@@ -43,6 +44,7 @@ typedef void (*topicCallback)(const char* arg);
 #define UBSUB_ERR_NETWORK -9
 #define UBSUB_ERR_SEND -10
 #define UBSUB_ERR_BAD_REQUEST -11
+#define UBSUB_ERR_NONCE_DUPE -12
 #define UBSUB_MISSING_ARGS -50
 #define UBSUB_ERR_UNKNOWN -1000
 #define UBSUB_ERR_MALLOC -2000
@@ -75,6 +77,8 @@ private: // State
   uint64_t lastPing;
 
   QueuedMessage* queue;
+  uint64_t rrnonce[UBSUB_NONCE_RR_COUNT];
+  int lastNonceIdx;
 
 private:
   void init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort);
@@ -94,6 +98,9 @@ private:
   QueuedMessage* queueMessage(const uint8_t* buf, int bufLen, const uint64_t &nonce);
   void removeQueue(const uint64_t &nonce);
   void processQueue();
+
+  void writeNonce(const uint64_t &nonce);
+  bool hasNonce(const uint64_t &nonce);
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);
