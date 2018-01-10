@@ -49,24 +49,26 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define CMD_PONG 0x11
 
 #ifdef UBSUB_LOG
-#if !(ARDUINO || PARTICLE)
-  #include <iostream>
-  #include <stdarg.h>
-#endif
-
-static void log(const char* level, const char* msg, ...) {
-  static char logbuf[256];
-  va_list argptr;
-  va_start(argptr, msg);
-  vsprintf(logbuf, msg, argptr);
-  va_end(argptr);
-  #if ARDUINO || PARTICLE
-    Serial.printf("[%s] %s", level, logbuf);
-    Serial.println();
+  #if !(ARDUINO || PARTICLE)
+    #include <iostream>
+    #include <stdarg.h>
   #else
-    std::cerr << "[" << level << "] " << logbuf << std::endl;
+    #warning Logs are enabled. This will result in more string memory being consumed
   #endif
-}
+
+  static void log(const char* level, const char* msg, ...) {
+    static char logbuf[256];
+    va_list argptr;
+    va_start(argptr, msg);
+    vsprintf(logbuf, msg, argptr);
+    va_end(argptr);
+    #if ARDUINO || PARTICLE
+      Serial.printf("[%s] %s", level, logbuf);
+      Serial.println();
+    #else
+      std::cerr << "[" << level << "] " << logbuf << std::endl;
+    #endif
+  }
 #endif
 
 // Get time in seconds
@@ -74,7 +76,7 @@ static uint64_t getTime() {
 #if ARDUINO
   return (uint64_t)(millis() / 1000);
 #elif PARTICLE
-  return now();
+  return Time.now();
 #else
   return std::time(NULL);
 #endif
@@ -370,7 +372,8 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   uint8_t* body = buf + 38;
 
   // Validate timestamp is within bounds
-  int diff = (int64_t)getTime() - (int64_t)ts;
+  uint64_t now = getTime();
+  int diff = (int64_t)now - (int64_t)ts; // Signed cause could be negative
   if (diff < -UBSUB_PACKET_TIMEOUT || diff > UBSUB_PACKET_TIMEOUT) {
     this->setError(UBSUB_ERR_TIMEOUT);
     return;
@@ -384,7 +387,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       #ifdef UBSUB_LOG
       log("DEBUG", "Got pong");
       #endif
-      this->lastPong = getTime();
+      if (now > this->lastPong) {
+        this->lastPong = now;
+      }
       break;
     case CMD_MSG_ACK:
     {
