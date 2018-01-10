@@ -404,7 +404,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   }
 }
 
-QueuedMessage* Ubsub::queueMessage(uint8_t* buf, int bufLen, const uint64_t &nonce) {
+QueuedMessage* Ubsub::queueMessage(const uint8_t* buf, int bufLen, const uint64_t &nonce) {
   QueuedMessage *msg = (QueuedMessage*)malloc(sizeof(QueuedMessage));
   if (msg == NULL) {
     this->setError(UBSUB_ERR_MALLOC);
@@ -412,6 +412,11 @@ QueuedMessage* Ubsub::queueMessage(uint8_t* buf, int bufLen, const uint64_t &non
   }
 
   msg->buf = (uint8_t*)malloc(bufLen);
+  if (msg->buf == NULL) {
+    this->setError(UBSUB_ERR_MALLOC);
+    free(msg);
+    return NULL;
+  }
   msg->bufLen = bufLen;
   msg->retryTime = getTime() + UBSUB_PACKET_RETRY_SECONDS;
   msg->retryNumber = 0;
