@@ -25,7 +25,11 @@ typedef void (*topicCallback)(const char* arg);
 #define UBSUB_CONNECTION_TIMEOUT 120
 
 // If defined, will log to stderr on unix, and Serial on embedded
+// Not enabled by default on embedded, but feel free to enable!
+// If enabled, will output logs to serial
+#if !(ARDUINO || PARTICLE)
 #define UBSUB_LOG
+#endif
 
 // Error codes
 #define UBSUB_ERR_INVALID_PACKET -1
