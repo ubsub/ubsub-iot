@@ -60,6 +60,7 @@ typedef struct QueuedMessage {
 
 class Ubsub {
 private: // Config
+  const char* deviceId;
   const char* userId;
   const char* userKey;
   const char* host;

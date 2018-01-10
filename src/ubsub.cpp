@@ -71,6 +71,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
   }
 #endif
 
+static char* getDeviceId();
 static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
 static uint64_t getTime();
 static uint32_t getNonce32();
@@ -105,7 +106,12 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   this->lastPing = 0;
   this->queue = NULL;
   this->autoRetry = true;
+  this->deviceId = getDeviceId();
   this->initSocket();
+
+  #ifdef UBSUB_LOG
+  log("INFO", "DID: %s", this->deviceId);
+  #endif
 }
 
 bool Ubsub::connect(int timeout) {
@@ -155,10 +161,10 @@ void Ubsub::createTopic(const char *topicName) {
   memset(command, 0, COMMAND_LEN);
 
   *(uint16_t*)command = this->localPort;
-  strncpy((char*)command+2, "HARDCODED_DID", 32);
+  strncpy((char*)command+2, this->deviceId, 32);
   strncpy((char*)command+34, topicName, 32);
-  strncpy((char*)command+66, "HARDCODED_SUB_ID", 32);
-  *(uint16_t*)(command+98) = 60 * 5; // Max TTL (5 minutes)
+  strncpy((char*)command+66, "", 32); // Null (empty) means no subscribe
+  *(uint16_t*)(command+98) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
 
   this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP, this->autoRetry, command, COMMAND_LEN);
 }
@@ -630,6 +636,22 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
 
 // STATIC HELPERS ===============
 
+// Gets a static pointer to a cstr deviceId
+static char* getDeviceId() {
+  #define STR_HELPER(x) #x
+  #define STR(x) STR_HELPER(x)
+
+  #if PARTICLE
+    static char did[32];
+    System.deviceID().to_cstr(did, 32);
+  #elif __COUNTER__
+    static char did[] = STR(__COUNTER__);
+  #else
+    static char did[] = "BDID:" __DATE__ " " __TIME__;
+  #endif
+  return did;
+}
+
 // Get time in seconds
 static uint64_t getTime() {
 #if ARDUINO
@@ -646,7 +668,11 @@ static uint32_t getNonce32() {
 #if ARDUINO || PARTICLE
   return (random(256) << 24) | (random(256) << 16) | (random(256) << 8) | random(256);
 #else
-  srand(getTime()); //FIXME: This isn't great
+  static bool init = false;
+  if (!init) {
+    srand(getTime()); //FIXME: This isn't great
+    init = true;
+  }
   return (uint32_t)rand() + (uint32_t)rand();
 #endif
 }
