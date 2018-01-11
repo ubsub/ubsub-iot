@@ -39,7 +39,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define SUB_FLAG_MSG_NEED_ACK 0x4
 
 #define CMD_SUB 0x1
-#define CMD_ACK 0x2
+#define CMD_SUB_ACK 0x2
 #define CMD_UNSUB 0x3
 #define CMD_UNSUB_ACK 0x4
 #define CMD_SUB_MSG 0x5
@@ -298,6 +298,10 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     return;
   }
 
+  #ifdef UBSUB_LOG
+  log("INFO", "Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
+  #endif
+
   switch(cmd) {
     case CMD_PONG: // Pong
     {
@@ -313,6 +317,26 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       if (now > this->lastPong) {
         this->lastPong = now;
       }
+      break;
+    }
+    case CMD_SUB_ACK:
+    {
+      if (bodyLen < 72) {
+        this->setError(UBSUB_ERR_BAD_REQUEST);
+        return;
+      }
+      char topicId[17];
+      char subId[17];
+      char subKey[33];
+      uint64_t ackNonce = *(uint64_t*)(body+0);
+      strncpy(topicId, (char*)buf+8, 16);
+      strncpy(subId, (char*)buf+24, 16);
+      strncpy(subKey, (char*)buf+40, 32);
+
+      this->removeQueue(ackNonce);
+      #ifdef UBSUB_LOG
+      log("DEBUG", "Received subscription ack for topic %s: %s key %s", topicId, subId, subKey);
+      #endif
       break;
     }
     case CMD_MSG_ACK:
@@ -332,6 +356,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       break;
     }
     default:
+      #ifdef UBSUB_LOG
+      log("WARN", "Unrecognized command: %d", cmd);
+      #endif
       this->setError(UBSUB_ERR_BAD_REQUEST);
       break;
   }
