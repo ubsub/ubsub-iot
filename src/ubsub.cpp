@@ -157,15 +157,15 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
 }
 
 void Ubsub::createTopic(const char *topicName, bool subscribe) {
-  const int COMMAND_LEN = 100;
+  const int COMMAND_LEN = 68;
   uint8_t command[COMMAND_LEN];
   memset(command, 0, COMMAND_LEN);
 
   *(uint16_t*)command = this->localPort;
-  strncpy((char*)command+34, topicName, 32);
+  strncpy((char*)command+2, topicName, 32);
   if (subscribe)
-    strncpy((char*)command+66, this->deviceId, 32);
-  *(uint16_t*)(command+98) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
+    strncpy((char*)command+34, this->deviceId, 32);
+  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
 
   this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP, this->autoRetry, command, COMMAND_LEN);
 }
