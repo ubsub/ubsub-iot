@@ -79,6 +79,9 @@ static uint32_t getNonce32();
 static uint64_t getNonce64();
 static int min(int left, int right);
 
+// Like strncpy, but null-terminates. dst should be maxLen+1 for null term
+static int strfixedcopy(char* dst, const char *src, int maxLen);
+
 // Ubsub Implementation
 
 Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort) {
@@ -162,7 +165,7 @@ void Ubsub::createTopic(const char *topicName, bool subscribe) {
   memset(command, 0, COMMAND_LEN);
 
   *(uint16_t*)command = this->localPort;
-  strncpy((char*)command+2, topicName, 32);
+  strncpy((char*)command+2, topicName, 32); // Don't make strfixedcopy (Don't want to null term here)
   if (subscribe)
     strncpy((char*)command+34, this->deviceId, 32);
   *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
@@ -251,7 +254,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
   uint64_t nonce = *(uint64_t*)(buf+1);
   char userId[17];
-  strncpy(userId, (char*)(buf+9), 16);
+  strfixedcopy(userId, (char*)(buf+9), 16);
 
   if (strcmp(userId, this->userId) != 0) {
     this->setError(UBSUB_ERR_USER_MISMATCH);
@@ -329,9 +332,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       char subId[17];
       char subKey[33];
       uint64_t ackNonce = *(uint64_t*)(body+0);
-      strncpy(topicId, (char*)body+8, 16);
-      strncpy(subId, (char*)body+24, 16);
-      strncpy(subKey, (char*)body+40, 32);
+      strfixedcopy(topicId, (char*)body+8, 16);
+      strfixedcopy(subId, (char*)body+24, 16);
+      strfixedcopy(subKey, (char*)body+40, 32);
 
       this->removeQueue(ackNonce);
       #ifdef UBSUB_LOG
@@ -348,9 +351,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       char subscriptionId[17];
       char subscriptionKey[33];
       char event[UBSUB_MTU-48+1];
-      strncpy(subscriptionId, (char*)body, 16); //FIXME: strncpy does not null terminate (remove .h file?)
-      strncpy(subscriptionKey, (char*)body+16, 32);
-      strncpy(event, (char*)body+48, bodyLen - 48);
+      strfixedcopy(subscriptionId, (char*)body, 16);
+      strfixedcopy(subscriptionKey, (char*)body+16, 32);
+      strfixedcopy(event, (char*)body+48, bodyLen - 48);
 
       #ifdef UBSUB_LOG
       log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
@@ -729,4 +732,16 @@ static uint64_t getNonce64() {
 
 static int min(int left, int right) {
   return left < right ? left : right;
+}
+
+static int strfixedcopy(char* dst, const char *src, int maxLen) {
+  int n = 0;
+  for (; n<maxLen; ++n) {
+    char c = src[n];
+    if (c == '\0')
+      break;
+    dst[n] = c;
+  }
+  dst[n] = '\0';
+  return n;
 }
