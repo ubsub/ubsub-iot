@@ -38,6 +38,9 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define SUB_FLAG_UNWRAP 0x2
 #define SUB_FLAG_MSG_NEED_ACK 0x4
 
+#define SUB_MSG_FLAG_ACK 0x1
+#define SUB_MSG_FLAG_WAS_UNWRAPPED 0x2
+
 #define CMD_SUB 0x1
 #define CMD_SUB_ACK 0x2
 #define CMD_UNSUB 0x3
@@ -173,7 +176,7 @@ void Ubsub::createTopic(const char *topicName, bool subscribe) {
     pushstr(command+34, this->deviceId, 32);
   *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
 
-  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP, this->autoRetry, command, COMMAND_LEN);
+  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK, this->autoRetry, command, COMMAND_LEN);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, topicCallback callback) {
@@ -361,6 +364,17 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       #ifdef UBSUB_LOG
       log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
       #endif
+
+      //TODO: Call correct function to notify a message has arrived
+
+      //TODO: Ack, if requested
+      if (flag & SUB_MSG_FLAG_ACK) {
+        uint8_t msgAck[8];
+        memset(msgAck, 0, sizeof(msgAck));
+        *(uint64_t*)msgAck = nonce;
+        this->sendCommand(CMD_SUB_MSG_ACK, 0x0, false, msgAck, sizeof(msgAck));
+      }
+
       break;
     }
     case CMD_MSG_ACK:
