@@ -80,7 +80,10 @@ static uint64_t getNonce64();
 static int min(int left, int right);
 
 // Like strncpy, but null-terminates. dst should be maxLen+1 for null term
-static int strfixedcopy(char* dst, const char *src, int maxLen);
+static int pullstr(char* dst, const uint8_t *src, int maxLen);
+
+// Pushes string into dst buf, will null-term entire remaining length (if any)
+static int pushstr(uint8_t* dst, const char *src, int len);
 
 // Ubsub Implementation
 
@@ -146,9 +149,9 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
 
   static uint8_t command[UBSUB_MTU];
   memset(command, 0, 64);
-  memcpy(command, topicId, min(strlen(topicId), 32));
+  pushstr(command, topicId, 32);
   if (topicKey != NULL) {
-    memcpy(command+32, topicKey, min(strlen(topicKey), 32));
+    pushstr(command+32, topicKey, 32);
   }
 
   int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-64) : 0;
@@ -165,9 +168,9 @@ void Ubsub::createTopic(const char *topicName, bool subscribe) {
   memset(command, 0, COMMAND_LEN);
 
   *(uint16_t*)command = this->localPort;
-  strncpy((char*)command+2, topicName, 32); // Don't make strfixedcopy (Don't want to null term here)
+  pushstr(command+2, topicName, 32);
   if (subscribe)
-    strncpy((char*)command+34, this->deviceId, 32);
+    pushstr(command+34, this->deviceId, 32);
   *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
 
   this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP, this->autoRetry, command, COMMAND_LEN);
@@ -254,7 +257,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
   uint64_t nonce = *(uint64_t*)(buf+1);
   char userId[17];
-  strfixedcopy(userId, (char*)(buf+9), 16);
+  pullstr(userId, buf+9, 16);
 
   if (strcmp(userId, this->userId) != 0) {
     this->setError(UBSUB_ERR_USER_MISMATCH);
@@ -332,9 +335,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       char subId[17];
       char subKey[33];
       uint64_t ackNonce = *(uint64_t*)(body+0);
-      strfixedcopy(topicId, (char*)body+8, 16);
-      strfixedcopy(subId, (char*)body+24, 16);
-      strfixedcopy(subKey, (char*)body+40, 32);
+      pullstr(topicId, body+8, 16);
+      pullstr(subId, body+24, 16);
+      pullstr(subKey, body+40, 32);
 
       this->removeQueue(ackNonce);
       #ifdef UBSUB_LOG
@@ -351,9 +354,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       char subscriptionId[17];
       char subscriptionKey[33];
       char event[UBSUB_MTU-48+1];
-      strfixedcopy(subscriptionId, (char*)body, 16);
-      strfixedcopy(subscriptionKey, (char*)body+16, 32);
-      strfixedcopy(event, (char*)body+48, bodyLen - 48);
+      pullstr(subscriptionId, body, 16);
+      pullstr(subscriptionKey, body+16, 32);
+      pullstr(event, body+48, bodyLen - 48);
 
       #ifdef UBSUB_LOG
       log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
@@ -734,7 +737,7 @@ static int min(int left, int right) {
   return left < right ? left : right;
 }
 
-static int strfixedcopy(char* dst, const char *src, int maxLen) {
+static int pullstr(char* dst, const uint8_t *src, int maxLen) {
   int n = 0;
   for (; n<maxLen; ++n) {
     char c = src[n];
@@ -743,5 +746,18 @@ static int strfixedcopy(char* dst, const char *src, int maxLen) {
     dst[n] = c;
   }
   dst[n] = '\0';
+  return n;
+}
+
+static int pushstr(uint8_t* dst, const char *src, int len) {
+  int n = 0;
+  for (; n<len; ++n) {
+    char c = src[n];
+    if (c == '\0')
+      break;
+    dst[n] = c;
+  }
+  for (;n<len; ++n)
+    dst[n] = '\0';
   return n;
 }
