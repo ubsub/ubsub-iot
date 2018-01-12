@@ -329,13 +329,31 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       char subId[17];
       char subKey[33];
       uint64_t ackNonce = *(uint64_t*)(body+0);
-      strncpy(topicId, (char*)buf+8, 16);
-      strncpy(subId, (char*)buf+24, 16);
-      strncpy(subKey, (char*)buf+40, 32);
+      strncpy(topicId, (char*)body+8, 16);
+      strncpy(subId, (char*)body+24, 16);
+      strncpy(subKey, (char*)body+40, 32);
 
       this->removeQueue(ackNonce);
       #ifdef UBSUB_LOG
       log("DEBUG", "Received subscription ack for topic %s: %s key %s", topicId, subId, subKey);
+      #endif
+      break;
+    }
+    case CMD_SUB_MSG:
+    {
+      if (bodyLen < 48) {
+        this->setError(UBSUB_ERR_BAD_REQUEST);
+        return;
+      }
+      char subscriptionId[17];
+      char subscriptionKey[33];
+      char event[UBSUB_MTU-48+1];
+      strncpy(subscriptionId, (char*)body, 16); //FIXME: strncpy does not null terminate (remove .h file?)
+      strncpy(subscriptionKey, (char*)body+16, 32);
+      strncpy(event, (char*)body+48, bodyLen - 48);
+
+      #ifdef UBSUB_LOG
+      log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
       #endif
       break;
     }
