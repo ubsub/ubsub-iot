@@ -60,9 +60,11 @@ typedef struct QueuedMessage {
 } QueuedMessage;
 
 typedef struct SubscribedFunc {
+  uint64_t renewTime;
   uint64_t requestNonce;
-  char topicNameOrId[32];
-  char susbcriptionId[16];
+  char topicNameOrId[33];
+  char subscriptionId[17];
+  char subscriptionKey[33];
   TopicCallback callback;
   SubscribedFunc* next;
 } SubscribedFunc;
@@ -114,6 +116,9 @@ private:
 
   void writeNonce(const uint64_t &nonce);
   bool hasNonce(const uint64_t &nonce);
+
+  SubscribedFunc* getSubscribedFuncByNonce(const uint64_t &nonce);
+  SubscribedFunc* getSubscribedFuncBySubId(const char* subId);
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);

@@ -207,6 +207,7 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
   sub->callback = callback;
   sub->next = this->subs;
   sub->requestNonce = getNonce64();
+  sub->renewTime = getTime() + 5; // Retry frequenctly. Ack will push this out
   this->subs = sub;
 
   this->sendCommand(
@@ -369,18 +370,29 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      char topicId[17];
-      char subId[17];
-      char subKey[33];
       uint64_t ackNonce = *(uint64_t*)(body+0);
-      pullstr(topicId, body+8, 16);
-      pullstr(subId, body+24, 16);
-      pullstr(subKey, body+40, 32);
+
+      SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
+      if (sub != NULL) {
+        #ifdef UBSUB_LOG
+        log("INFO", "Processing ACK for subscription...");
+        #endif
+        sub->renewTime = getTime() + UBSUB_SUBSCRIPTION_TTL;
+        sub->requestNonce = 0;
+        pullstr(sub->topicNameOrId, body+8, 16);
+        pullstr(sub->subscriptionId, body+24, 16);
+        pullstr(sub->subscriptionKey, body+40, 32);
+
+        #ifdef UBSUB_LOG
+        log("DEBUG", "Received subscription ack for topic %s: %s key %s", sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
+        #endif
+      } else {
+        #ifdef UBSUB_LOG
+        log("WARN", "Received sub ack for unknown subscription");
+        #endif
+      }
 
       this->removeQueue(ackNonce);
-      #ifdef UBSUB_LOG
-      log("DEBUG", "Received subscription ack for topic %s: %s key %s", topicId, subId, subKey);
-      #endif
       break;
     }
     case CMD_SUB_MSG:
@@ -400,14 +412,26 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
       #endif
 
-      //TODO: Call correct function to notify a message has arrived
-
-      //TODO: Ack, if requested
+      // Ack, if requested (before processing, in case processing takes time)
       if (flag & SUB_MSG_FLAG_ACK) {
         uint8_t msgAck[8];
         memset(msgAck, 0, sizeof(msgAck));
         *(uint64_t*)msgAck = nonce;
         this->sendCommand(CMD_SUB_MSG_ACK, 0x0, false, msgAck, sizeof(msgAck));
+      }
+
+      // Call correct function to notify a message has arrived
+      SubscribedFunc* sub = this->getSubscribedFuncBySubId(subscriptionId);
+      if (sub != NULL && strcmp(sub->subscriptionKey, subscriptionKey) == 0) {
+        sub->callback(event);
+      } else if (sub != NULL) {
+        #ifdef UBSUB_LOG
+        log("WARN", "Received subscription message, but keys don't match: %s != %s", sub->subscriptionKey, subscriptionKey);
+        #endif
+      } else {
+        #ifdef UBSUB_LOG
+        log("WARN", "Received subscription message for unknown subscription %s", subscriptionId);
+        #endif
       }
 
       break;
@@ -530,6 +554,26 @@ void Ubsub::ping() {
   uint8_t buf[2];
   *(uint16_t*)buf = (uint16_t)this->localPort;
   this->sendCommand(CMD_PING, 0x0, false, buf, 2);
+}
+
+SubscribedFunc* Ubsub::getSubscribedFuncByNonce(const uint64_t &nonce) {
+  SubscribedFunc* sub = this->subs;
+  while (sub != NULL) {
+    if (sub->requestNonce == nonce)
+      return sub;
+    sub = sub->next;
+  }
+  return NULL;
+}
+
+SubscribedFunc* Ubsub::getSubscribedFuncBySubId(const char* subId) {
+  SubscribedFunc* sub = this->subs;
+  while (sub != NULL) {
+    if (strcmp(sub->subscriptionId, subId) == 0)
+      return sub;
+    sub = sub->next;
+  }
+  return NULL;
 }
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen) {
