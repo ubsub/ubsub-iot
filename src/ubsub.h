@@ -13,7 +13,7 @@
   typedef int UDPSocket;
 #endif
 
-typedef void (*topicCallback)(const char* arg);
+typedef void (*TopicCallback)(const char* arg);
 
 // Configurable settings
 #define UBSUB_ERROR_BUFFER_LEN 16
@@ -59,6 +59,14 @@ typedef struct QueuedMessage {
   QueuedMessage* next;
 } QueuedMessage;
 
+typedef struct SubscribedFunc {
+  uint64_t requestNonce;
+  char topicNameOrId[32];
+  char susbcriptionId[16];
+  TopicCallback callback;
+  SubscribedFunc* next;
+} SubscribedFunc;
+
 class Ubsub {
 private: // Config
   const char* deviceId;
@@ -79,6 +87,7 @@ private: // State
   uint64_t lastPing;
 
   QueuedMessage* queue;
+  SubscribedFunc* subs;
   uint64_t rrnonce[UBSUB_NONCE_RR_COUNT];
   int lastNonceIdx;
 
@@ -88,7 +97,9 @@ private:
   void initSocket();
   void closeSocket();
   int sendData(const uint8_t* buf, int bufSize);
+  int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen);
   int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen);
+  int sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen);
 
   int receiveData();
   void processPacket(uint8_t *buf, int len);
@@ -124,11 +135,11 @@ public:
 
   // Listen to a given topic for events. Similar to creating a function
   // but will listen to an existing topic
-  void listenToTopic(const char *topicNameOrId, topicCallback callback);
+  void listenToTopic(const char *topicNameOrId, TopicCallback callback);
 
   // Create a new function that can be invoked by another caller, and immediately listen to it
   // This function will be a topic in ubsub
-  void createFunction(const char *name, topicCallback callback);
+  void createFunction(const char *name, TopicCallback callback);
 
   // Call function on another device
   int callFunction(const char *name, const char *arg);

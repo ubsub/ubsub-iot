@@ -116,6 +116,7 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   this->lastPing = 0;
   this->queue = NULL;
   this->autoRetry = true;
+  this->subs = NULL;
   this->deviceId = getDeviceId();
   this->initSocket();
 
@@ -162,7 +163,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
     memcpy(command+64, msg, msgLen);
   }
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, this->autoRetry, command, msgLen + 64);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, command, msgLen + 64);
 }
 
 void Ubsub::createTopic(const char *topicName, bool subscribe) {
@@ -174,16 +175,40 @@ void Ubsub::createTopic(const char *topicName, bool subscribe) {
   pushstr(command+2, topicName, 32);
   if (subscribe)
     pushstr(command+34, this->deviceId, 32);
-  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL; // Max TTL (5 minutes)
+  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
 
-  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK, this->autoRetry, command, COMMAND_LEN);
+  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK, command, COMMAND_LEN);
 }
 
-void Ubsub::listenToTopic(const char *topicNameOrId, topicCallback callback) {
+void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
+  const int COMMAND_LEN = 68;
+  uint8_t command[COMMAND_LEN];
+  memset(command, 0, COMMAND_LEN);
 
+  *(uint16_t*)command = this->localPort;
+  pushstr(command+2, topicNameOrId, 32);
+  pushstr(command+34, this->deviceId, 32);
+  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
+
+  // Register subscription in LL
+  SubscribedFunc* sub = (SubscribedFunc*)malloc(sizeof(SubscribedFunc));
+  memset(sub, 0, sizeof(SubscribedFunc));
+  strncpy(sub->topicNameOrId, topicNameOrId, 16);
+  sub->callback = callback;
+  sub->next = this->subs;
+  sub->requestNonce = getNonce64();
+  this->subs = sub;
+
+  this->sendCommand(
+    CMD_SUB,
+    SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK,
+    this->autoRetry,
+    sub->requestNonce,
+    command,
+    COMMAND_LEN);
 }
 
-void Ubsub::createFunction(const char *name, topicCallback callback) {
+void Ubsub::createFunction(const char *name, TopicCallback callback) {
 
 }
 
@@ -497,9 +522,8 @@ void Ubsub::ping() {
   this->sendCommand(CMD_PING, 0x0, false, buf, 2);
 }
 
-int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen) {
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen) {
   static uint8_t buf[UBSUB_MTU];
-  uint64_t nonce = getNonce64();
   int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, nonce, command, commandLen);
   if (plen < 0) {
     this->setError(UBSUB_ERR_SEND);
@@ -513,6 +537,14 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *co
   return this->sendData(buf, plen);
 }
 
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen) {
+  uint64_t nonce = getNonce64();
+  return this->sendCommand(cmd, flag, retry, nonce, command, commandLen);
+}
+
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen) {
+  return this->sendCommand(cmd, flag, this->autoRetry, command, commandLen);
+}
 
 
 // PRIVATE multiplatform socket code
