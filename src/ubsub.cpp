@@ -388,7 +388,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         #endif
       } else {
         #ifdef UBSUB_LOG
-        log("WARN", "Received sub ack for unknown subscription");
+        log("WARN", "Received sub ack for unknown subscription %d", ackNonce);
         #endif
       }
 

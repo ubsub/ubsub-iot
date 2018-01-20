@@ -2,6 +2,10 @@
 #include <unistd.h>
 #include "../../src/ubsub.h"
 
+void myMethod(const char* arg) {
+  std::cout << "RECEIVED: " << arg << std::endl;
+}
+
 int main() {
   std::cout << "Hi there" << std::endl;
 
@@ -10,7 +14,8 @@ int main() {
     std::cout << "Failed to connect" << std::endl;
   }
 
-  client.createTopic("testy", true);
+  //client.createTopic("testy", true);
+  client.listenToTopic("testy", myMethod);
 
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
 
