@@ -129,11 +129,21 @@ bool Ubsub::connect(int timeout) {
   this->lastPong = 0;
   uint64_t start = getTime();
   while(getTime() < start + timeout) {
+    // If WiFi isn't connected, wait for it
+    #ifdef ARDUINO
+    if (WiFi.status() != WL_CONNECTED)
+      continue;
+    #elif PARTICLE
+    if (!WiFi.ready())
+      continue;
+    #endif
+
     #ifdef UBSUB_LOG
     log("DEBUG", "Attempting connect...");
     #endif
     this->ping();
 
+    // Wait for pong
     uint64_t waitStart = getTime();
     while(getTime() < waitStart + 1) {
       this->receiveData();
@@ -743,7 +753,7 @@ static char* getDeviceId() {
     static char did[32];
     System.deviceID().to_cstr(did, 32);
   #elif __COUNTER__
-    static char did[] = STR(__COUNTER__);
+    static char did[] = "CDID:" STR(__COUNTER__);
   #else
     static char did[] = "BDID:" __DATE__ " " __TIME__;
   #endif
