@@ -423,7 +423,8 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       // Call correct function to notify a message has arrived
       SubscribedFunc* sub = this->getSubscribedFuncBySubId(subscriptionId);
       if (sub != NULL && strcmp(sub->subscriptionKey, subscriptionKey) == 0) {
-        sub->callback(event);
+        if (sub->callback != NULL)
+          sub->callback(event);
       } else if (sub != NULL) {
         #ifdef UBSUB_LOG
         log("WARN", "Received subscription message, but keys don't match: %s != %s", sub->subscriptionKey, subscriptionKey);
