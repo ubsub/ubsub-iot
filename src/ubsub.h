@@ -119,6 +119,8 @@ private:
 
   SubscribedFunc* getSubscribedFuncByNonce(const uint64_t &nonce);
   SubscribedFunc* getSubscribedFuncBySubId(const char* subId);
+  void invalidateSubscriptions(); // Make so all have to be renewed
+  void renewSubscriptions();
 
 public:
   Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);

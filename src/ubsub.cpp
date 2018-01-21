@@ -253,6 +253,9 @@ void Ubsub::processEvents() {
     #ifdef UBSUB_LOG
     log("WARN", "Haven't received pong.. lost connection?");
     #endif
+    // Attempt reconnection
+    this->invalidateSubscriptions();
+    this->connect();
   }
 
   // Receive and process data
@@ -260,6 +263,9 @@ void Ubsub::processEvents() {
 
   // Process queued events
   this->processQueue();
+
+  // Renew any subscriptions that need it
+  this->renewSubscriptions();
 }
 
 
@@ -575,6 +581,48 @@ SubscribedFunc* Ubsub::getSubscribedFuncBySubId(const char* subId) {
     sub = sub->next;
   }
   return NULL;
+}
+
+void Ubsub::invalidateSubscriptions() {
+  SubscribedFunc *sub = this->subs;
+  while (sub != NULL) {
+    sub->renewTime = 0;
+    sub = sub->next;
+  }
+}
+
+void Ubsub::renewSubscriptions() {
+  uint64_t now = getTime();
+  SubscribedFunc *sub = this->subs;
+  while (sub != NULL) {
+    if (now >= sub->renewTime) {
+      // Renew
+      #ifdef UBSUB_LOG
+      log("INFO", "Renewing subscription to %s...", sub->topicNameOrId);
+      #endif
+
+      sub->requestNonce = getNonce64();
+      sub->renewTime = now + 5;
+
+      const int COMMAND_LEN = 68;
+      uint8_t command[COMMAND_LEN];
+      memset(command, 0, COMMAND_LEN);
+
+      *(uint16_t*)command = this->localPort;
+      pushstr(command+2, sub->topicNameOrId, 32);
+      pushstr(command+34, this->deviceId, 32);
+      *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
+
+      this->sendCommand(
+        CMD_SUB,
+        SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK,
+        this->autoRetry,
+        sub->requestNonce,
+        command,
+        COMMAND_LEN);
+    }
+    sub = sub->next;
+  }
 }
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen) {
