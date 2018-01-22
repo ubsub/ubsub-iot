@@ -40,8 +40,6 @@ int main() {
 
 ## Simple Arduino/Particle Example
 ```cpp
-#include <iostream>
-#include <unistd.h>
 #include "ubsub.h"
 
 Ubsub client("MyUserId", "MyUserSecret");
