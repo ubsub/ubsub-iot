@@ -251,7 +251,6 @@ void Ubsub::processEvents() {
   }
 
   if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
-    // TODO: Implement re-subscribe/re-connect
     #ifdef UBSUB_LOG
     log("WARN", "Haven't received pong.. lost connection?");
     #endif
@@ -714,7 +713,6 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
       #ifdef UBSUB_LOG
       log("WARN", "Failed to resolve hostname %s. Connected?", this->host);
       #endif
-      //TODO: Queue outgoing data (if required.. flag?)
       return -1;
     }
 
