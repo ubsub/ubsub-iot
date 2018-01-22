@@ -71,8 +71,7 @@ typedef struct SubscribedFunc {
 class Ubsub {
 private: // Config
   const char* deviceId;
-  const char* userId;
-  const char* userKey;
+  const char* deviceKey;
   const char* host;
   int port;
   int localPort;
@@ -93,7 +92,7 @@ private: // State
   int lastNonceIdx;
 
 private:
-  void init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort);
+  void init(const char *deviceId, const char *deviceKey, const char *ubsubHost, const int ubsubPort);
 
   void initSocket();
   void closeSocket();
@@ -122,9 +121,9 @@ private:
   void renewSubscriptions();
 
 public:
-  Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort);
+  Ubsub(const char *deviceId, const char *deviceKey, const char *ubsubHost, int ubsubPort);
 
-  Ubsub(const char* userId, const char* userKey);
+  Ubsub(const char *deviceId, const char *deviceKey);
 
   // Attempts to establish a connection with UbSub.io
   // If succeeds returns true.  If fails after timeout, returns false

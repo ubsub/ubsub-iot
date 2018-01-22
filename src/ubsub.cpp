@@ -33,7 +33,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define UBSUB_CRYPTHEADER_LEN 25
 #define UBSUB_HEADER_LEN 13
 #define UBSUB_SIGNATURE_LEN 32
-#define USER_ID_MAX_LEN 16
+#define DEVICE_ID_MAX_LEN 16
 
 #define MSG_FLAG_ACK 0x1
 #define MSG_ACK_FLAG_DUPE 0x1
@@ -83,8 +83,8 @@ const int DEFAULT_UBSUB_PORT = 3005;
   }
 #endif
 
-static char* getDeviceId();
-static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
+static char* getUniqueDeviceId();
+static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
 static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
@@ -98,17 +98,17 @@ static int pushstr(uint8_t* dst, const char *src, int len);
 
 // Ubsub Implementation
 
-Ubsub::Ubsub(const char *userId, const char *userKey, const char *ubsubHost, int ubsubPort) {
-  this->init(userId, userKey, ubsubHost, ubsubPort);
+Ubsub::Ubsub(const char *deviceId, const char *deviceKey, const char *ubsubHost, int ubsubPort) {
+  this->init(deviceId, deviceKey, ubsubHost, ubsubPort);
 }
 
-Ubsub::Ubsub(const char *userId, const char *userKey) {
-  this->init(userId, userKey, DEFAULT_UBSUB_ROUTER, DEFAULT_UBSUB_PORT);
+Ubsub::Ubsub(const char *deviceId, const char *deviceKey) {
+  this->init(deviceId, deviceKey, DEFAULT_UBSUB_ROUTER, DEFAULT_UBSUB_PORT);
 }
 
-void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost, const int ubsubPort) {
-  this->userId = userId;
-  this->userKey = userKey;
+void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubHost, const int ubsubPort) {
+  this->deviceId = deviceId;
+  this->deviceKey = deviceKey;
   this->host = ubsubHost;
   this->port = ubsubPort;
   this->socketInit = false;
@@ -125,7 +125,6 @@ void Ubsub::init(const char *userId, const char *userKey, const char *ubsubHost,
   this->queue = NULL;
   this->autoRetry = true;
   this->subs = NULL;
-  this->deviceId = getDeviceId();
   this->initSocket();
 
   #ifdef UBSUB_LOG
@@ -306,10 +305,10 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   }
 
   uint64_t nonce = *(uint64_t*)(buf+1);
-  char userId[17];
-  pullstr(userId, buf+9, 16);
+  char deviceId[17];
+  pullstr(deviceId, buf+9, 16);
 
-  if (strcmp(userId, this->userId) != 0) {
+  if (strcmp(deviceId, this->deviceId) != 0) {
     this->setError(UBSUB_ERR_USER_MISMATCH);
     return;
   }
@@ -322,7 +321,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   this->writeNonce(nonce);
 
   // Test the signature
-  Sha256.initHmac((uint8_t*)this->userKey, strlen(this->userKey));
+  Sha256.initHmac((uint8_t*)this->deviceKey, strlen(this->deviceKey));
   Sha256.write(buf, len - UBSUB_SIGNATURE_LEN);
   uint8_t* digest = Sha256.resultHmac();
   uint8_t* signature = buf + len - UBSUB_SIGNATURE_LEN;
@@ -334,7 +333,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   // If version 0x3, need to run through cipher
   if (version == 0x3) {
     Sha256.init();
-    Sha256.write((uint8_t*)this->userKey, strlen(this->userKey));
+    Sha256.write((uint8_t*)this->deviceKey, strlen(this->deviceKey));
     uint8_t* expandedKey = Sha256.result();
     s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, len - UBSUB_CRYPTHEADER_LEN - UBSUB_SIGNATURE_LEN);
   }
@@ -628,7 +627,7 @@ void Ubsub::renewSubscriptions() {
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen) {
   static uint8_t buf[UBSUB_MTU];
-  int plen = createPacket(buf, UBSUB_MTU, this->userId, this->userKey, cmd, flag, nonce, command, commandLen);
+  int plen = createPacket(buf, UBSUB_MTU, this->deviceId, this->deviceKey, cmd, flag, nonce, command, commandLen);
   if (plen < 0) {
     this->setError(UBSUB_ERR_SEND);
     return -1;
@@ -787,7 +786,7 @@ void Ubsub::closeSocket() {
   }
 }
 
-static int createPacket(uint8_t* buf, int bufSize, const char *userId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
+static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
   if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN) {
     // Buffer too short
     return -1;
@@ -795,8 +794,8 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
 
   uint64_t ts = getTime();
 
-  const int userIdLen = strlen(userId);
-  if (userIdLen > USER_ID_MAX_LEN) {
+  const int deviceIdLen = strlen(deviceId);
+  if (deviceIdLen > DEVICE_ID_MAX_LEN) {
     return -2;
   }
 
@@ -806,7 +805,7 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
   // Set up CrpyHeader
   buf[0] = 0x3; // UDPv3 (encrypted with salsa20)
   *(uint64_t*)(buf+1) = nonce; // 64 bit nonce
-  memcpy(buf+9, userId, userIdLen);
+  memcpy(buf+9, deviceId, deviceIdLen);
 
   // Set header
   *(uint64_t*)(buf+25) = ts;
@@ -838,7 +837,7 @@ static int createPacket(uint8_t* buf, int bufSize, const char *userId, const cha
 // STATIC HELPERS ===============
 
 // Gets a static pointer to a cstr deviceId
-static char* getDeviceId() {
+static char* getUniqueDeviceId() {
   #define STR_HELPER(x) #x
   #define STR(x) STR_HELPER(x)
 
