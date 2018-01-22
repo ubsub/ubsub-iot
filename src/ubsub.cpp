@@ -61,6 +61,10 @@ const int DEFAULT_UBSUB_PORT = 3005;
   #endif
 
   static void log(const char* level, const char* msg, ...) {
+    #ifndef UBSUB_LOG_DEBUG
+    if (strcmp(level, "DEBUG") == 0)
+      return;
+    #endif
     static char logbuf[256];
     va_list argptr;
     va_start(argptr, msg);
@@ -162,43 +166,36 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   }
 
   static uint8_t command[UBSUB_MTU];
-  memset(command, 0, 64);
-  pushstr(command, topicId, 32);
+  memset(command, 0, 66);
+  *(uint16_t*)command = this->localPort;
+  pushstr(command+2, topicId, 32);
   if (topicKey != NULL) {
-    pushstr(command+32, topicKey, 32);
+    pushstr(command+34, topicKey, 32);
   }
 
-  int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-64) : 0;
+  int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-66) : 0;
   if (msgLen > 0) {
-    memcpy(command+64, msg, msgLen);
+    memcpy(command+66, msg, msgLen);
   }
+
+  #ifdef UBSUB_LOG
+  log("INFO", "Publishing message to topic %s with %d bytes...", topicId, msgLen);
+  #endif
 
   return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, command, msgLen + 64);
 }
 
-void Ubsub::createTopic(const char *topicName, bool subscribe) {
-  const int COMMAND_LEN = 68;
-  uint8_t command[COMMAND_LEN];
-  memset(command, 0, COMMAND_LEN);
-
-  *(uint16_t*)command = this->localPort;
-  pushstr(command+2, topicName, 32);
-  if (subscribe)
-    pushstr(command+34, this->deviceId, 32);
-  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
-
-  this->sendCommand(CMD_SUB, SUB_FLAG_ACK | SUB_FLAG_UNWRAP | SUB_FLAG_MSG_NEED_ACK, command, COMMAND_LEN);
-}
-
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
-  const int COMMAND_LEN = 68;
+  const int COMMAND_LEN = 44;
   uint8_t command[COMMAND_LEN];
   memset(command, 0, COMMAND_LEN);
+
+  uint64_t funcId = getNonce64();
 
   *(uint16_t*)command = this->localPort;
   pushstr(command+2, topicNameOrId, 32);
-  pushstr(command+34, this->deviceId, 32);
-  *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
+  *(uint64_t*)(command+34) = funcId;
+  *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
 
   // Register subscription in LL
   SubscribedFunc* sub = (SubscribedFunc*)malloc(sizeof(SubscribedFunc));
@@ -206,9 +203,14 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
   strncpy(sub->topicNameOrId, topicNameOrId, 16);
   sub->callback = callback;
   sub->next = this->subs;
+  sub->funcId = funcId;
   sub->requestNonce = getNonce64();
   sub->renewTime = getTime() + 5; // Retry frequenctly. Ack will push this out
   this->subs = sub;
+
+  #ifdef UBSUB_LOG
+  log("INFO", "Listening to '%s' with funcId %d...", topicNameOrId, funcId);
+  #endif
 
   this->sendCommand(
     CMD_SUB,
@@ -220,7 +222,7 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
 }
 
 void Ubsub::createFunction(const char *name, TopicCallback callback) {
-
+  this->listenToTopic(name, callback);
 }
 
 int Ubsub::callFunction(const char *name, const char *arg) {
@@ -287,7 +289,7 @@ void Ubsub::setError(const int err) {
 
 void Ubsub::processPacket(uint8_t *buf, int len) {
   #ifdef UBSUB_LOG
-  log("INFO", "Got %d bytes of data", len);
+  log("DEBUG", "Got %d bytes of data", len);
   #endif
   if (len < UBSUB_HEADER_LEN + UBSUB_CRYPTHEADER_LEN + UBSUB_SIGNATURE_LEN) {
     this->setError(UBSUB_ERR_INVALID_PACKET);
@@ -350,7 +352,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   }
 
   #ifdef UBSUB_LOG
-  log("INFO", "Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
+  log("DEBUG", "Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
   #endif
 
   switch(cmd) {
@@ -372,7 +374,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     }
     case CMD_SUB_ACK:
     {
-      if (bodyLen < 72) {
+      if (bodyLen < 88) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
@@ -380,17 +382,14 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 
       SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
       if (sub != NULL) {
-        #ifdef UBSUB_LOG
-        log("INFO", "Processing ACK for subscription...");
-        #endif
-        sub->renewTime = getTime() + UBSUB_SUBSCRIPTION_TTL;
         sub->requestNonce = 0;
-        pullstr(sub->topicNameOrId, body+8, 16);
-        pullstr(sub->subscriptionId, body+24, 16);
-        pullstr(sub->subscriptionKey, body+40, 32);
+        pullstr(sub->topicNameOrId, body+16, 16);
+        pullstr(sub->subscriptionId, body+32, 16);
+        pullstr(sub->subscriptionKey, body+48, 32);
+        sub->renewTime = *(uint64_t*)(body+80);
 
         #ifdef UBSUB_LOG
-        log("DEBUG", "Received subscription ack for topic %s: %s key %s", sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
+        log("INFO", "Received subscription ack for func %d topic %s: %s key %s", sub->funcId, sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
         #endif
       } else {
         #ifdef UBSUB_LOG
@@ -403,19 +402,18 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     }
     case CMD_SUB_MSG:
     {
-      if (bodyLen < 48) {
+      if (bodyLen < 40) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      char subscriptionId[17];
       char subscriptionKey[33];
       char event[UBSUB_MTU-48+1];
-      pullstr(subscriptionId, body, 16);
-      pullstr(subscriptionKey, body+16, 32);
-      pullstr(event, body+48, bodyLen - 48);
+      uint64_t funcId = *(uint64_t*)body+0;
+      pullstr(subscriptionKey, body+8, 32);
+      pullstr(event, body+40, bodyLen - 40);
 
       #ifdef UBSUB_LOG
-      log("INFO", "Received event from subscription %s with key %s: %s", subscriptionId, subscriptionKey, event);
+      log("INFO", "Received event from func %d with key %s: %s", funcId, subscriptionKey, event);
       #endif
 
       // Ack, if requested (before processing, in case processing takes time)
@@ -427,7 +425,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       }
 
       // Call correct function to notify a message has arrived
-      SubscribedFunc* sub = this->getSubscribedFuncBySubId(subscriptionId);
+      SubscribedFunc* sub = this->getSubscribedFuncByFuncId(funcId);
       if (sub != NULL && strcmp(sub->subscriptionKey, subscriptionKey) == 0) {
         if (sub->callback != NULL)
           sub->callback(event);
@@ -437,7 +435,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         #endif
       } else {
         #ifdef UBSUB_LOG
-        log("WARN", "Received subscription message for unknown subscription %s", subscriptionId);
+        log("WARN", "Received subscription message for unknown func %d", funcId);
         #endif
       }
 
@@ -492,7 +490,7 @@ QueuedMessage* Ubsub::queueMessage(const uint8_t* buf, int bufLen, const uint64_
   this->queue = msg;
 
   #ifdef UBSUB_LOG
-  log("INFO", "Queued %d bytes with nonce %d for retry", bufLen, nonce);
+  log("DEBUG", "Queued %d bytes with nonce %d for retry", bufLen, nonce);
   #endif
 
   return msg;
@@ -504,7 +502,7 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
   while(msg != NULL) {
     if (msg->cancelNonce == nonce) {
       #ifdef UBSUB_LOG
-      log("INFO", "Removing %d from queue", nonce);
+      log("DEBUG", "Removing %d from queue", nonce);
       #endif
       *prevNext = msg->next;
       free(msg->buf);
@@ -573,10 +571,10 @@ SubscribedFunc* Ubsub::getSubscribedFuncByNonce(const uint64_t &nonce) {
   return NULL;
 }
 
-SubscribedFunc* Ubsub::getSubscribedFuncBySubId(const char* subId) {
+SubscribedFunc* Ubsub::getSubscribedFuncByFuncId(const uint64_t &funcId) {
   SubscribedFunc* sub = this->subs;
   while (sub != NULL) {
-    if (strcmp(sub->subscriptionId, subId) == 0)
+    if (sub->funcId == funcId)
       return sub;
     sub = sub->next;
   }
@@ -604,14 +602,14 @@ void Ubsub::renewSubscriptions() {
       sub->requestNonce = getNonce64();
       sub->renewTime = now + 5;
 
-      const int COMMAND_LEN = 68;
+      const int COMMAND_LEN = 44;
       uint8_t command[COMMAND_LEN];
       memset(command, 0, COMMAND_LEN);
 
       *(uint16_t*)command = this->localPort;
       pushstr(command+2, sub->topicNameOrId, 32);
-      pushstr(command+34, this->deviceId, 32);
-      *(uint16_t*)(command+66) = UBSUB_SUBSCRIPTION_TTL;
+      *(uint64_t*)(command+34) = sub->funcId;
+      *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
 
       this->sendCommand(
         CMD_SUB,

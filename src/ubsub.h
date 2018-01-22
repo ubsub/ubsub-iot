@@ -27,11 +27,9 @@ typedef void (*TopicCallback)(const char* arg);
 #define UBSUB_NONCE_RR_COUNT 32 // Number of nonces to track
 
 // If defined, will log to stderr on unix, and Serial on embedded
-// Not enabled by default on embedded, but feel free to enable!
-// If enabled, will output logs to serial
-#if !(ARDUINO || PARTICLE)
-#define UBSUB_LOG
-#endif
+// Not enabled by default but feel free to build with -DUBSUB_LOG or uncomment below
+// #define UBSUB_LOG
+// #define UBSUB_LOG_DEBUG // Even more verbose logs
 
 // Error codes
 #define UBSUB_ERR_INVALID_PACKET -1
@@ -62,6 +60,7 @@ typedef struct QueuedMessage {
 typedef struct SubscribedFunc {
   uint64_t renewTime;
   uint64_t requestNonce;
+  uint64_t funcId;
   char topicNameOrId[33];
   char subscriptionId[17];
   char subscriptionKey[33];
@@ -118,7 +117,7 @@ private:
   bool hasNonce(const uint64_t &nonce);
 
   SubscribedFunc* getSubscribedFuncByNonce(const uint64_t &nonce);
-  SubscribedFunc* getSubscribedFuncBySubId(const char* subId);
+  SubscribedFunc* getSubscribedFuncByFuncId(const uint64_t &funcId);
   void invalidateSubscriptions(); // Make so all have to be renewed
   void renewSubscriptions();
 
@@ -136,9 +135,6 @@ public:
   // to the user.
   // The msg can either be serialized JSON OR a simple string that will be encapsulated on the server
   int publishEvent(const char *topicId, const char *topicKey, const char *msg);
-
-  // Creates a new topic, but does NOT listen to it by default
-  void createTopic(const char *topicName, bool subscribe = false);
 
   // Listen to a given topic for events. Similar to creating a function
   // but will listen to an existing topic
