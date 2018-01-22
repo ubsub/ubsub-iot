@@ -2,6 +2,10 @@
 #include "sha256.h"
 #include "salsa20.h"
 
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error Little endian ordering required for binary serialization
+#endif
+
 #if PARTICLE
   #include <Particle.h>
 #elif ARDUINO
