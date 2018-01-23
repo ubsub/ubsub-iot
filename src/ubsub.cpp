@@ -247,19 +247,25 @@ const int Ubsub::getLastError() {
 
 void Ubsub::processEvents() {
   // Send ping if necessary
-  uint64_t now = getTime();
-  if (now - this->lastPing >= UBSUB_PING_FREQ) {
-    this->lastPing = now;
-    this->ping();
-  }
+  // If we don't have any subs, no reason to constantly ping, as it's mostly for NAT negotiation
+  if (this->subs != NULL) {
+    uint64_t now = getTime();
+    if (now - this->lastPing >= UBSUB_PING_FREQ) {
+      this->lastPing = now;
+      this->ping();
+    }
 
-  if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
-    #ifdef UBSUB_LOG
-    log("WARN", "Haven't received pong.. lost connection?");
-    #endif
-    // Attempt reconnection
-    this->invalidateSubscriptions();
-    this->connect();
+    if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
+      #ifdef UBSUB_LOG
+      log("WARN", "Haven't received pong.. lost connection?");
+      #endif
+      // Attempt reconnection
+      this->invalidateSubscriptions();
+      this->connect();
+    }
+
+    // Renew any subscriptions that need it
+    this->renewSubscriptions();
   }
 
   // Receive and process data
@@ -267,9 +273,6 @@ void Ubsub::processEvents() {
 
   // Process queued events
   this->processQueue();
-
-  // Renew any subscriptions that need it
-  this->renewSubscriptions();
 }
 
 
