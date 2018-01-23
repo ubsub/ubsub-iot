@@ -83,7 +83,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
   }
 #endif
 
-static char* getUniqueDeviceId();
+//static char* getUniqueDeviceId();
 static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
 static uint64_t getTime();
 static uint32_t getNonce32();
@@ -837,6 +837,7 @@ static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const c
 // STATIC HELPERS ===============
 
 // Gets a static pointer to a cstr deviceId
+/*
 static char* getUniqueDeviceId() {
   #define STR_HELPER(x) #x
   #define STR(x) STR_HELPER(x)
@@ -851,6 +852,7 @@ static char* getUniqueDeviceId() {
   #endif
   return did;
 }
+*/
 
 // Get time in seconds
 static uint64_t getTime() {
