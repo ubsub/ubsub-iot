@@ -1,5 +1,7 @@
 # UbSub - Internet of Things (IoT)
 
+[![Build Status](https://travis-ci.org/ubsub/ubsub-iot.svg?branch=master)](https://travis-ci.org/ubsub/ubsub-iot)
+
 C++ implementation of ubsub's UDP protocol for secure and reliable bidirectional communication for embedded devices.
 
 # Usage
