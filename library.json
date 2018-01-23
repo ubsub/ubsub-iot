@@ -1,0 +1,26 @@
+{
+  "name": "Ubsub",
+  "keywords": "cloud, functions, events, pubsub, ubsub",
+  "description": "A platform for communicating between devices and services via ubsub.io",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/ubsub/ubsub-iot"
+  },
+  "authors":
+  [
+    {
+      "name": "Chris LaPointe",
+      "email": "support@ubsub.io",
+      "url": "http://ubsub.io",
+    }
+  ],
+  "export":
+  {
+    "include": "src"
+  },
+  "dependencies": {},
+  "version": "0.1.0",
+  "frameworks": "arduino",
+  "platforms": "espressif8266"
+}
