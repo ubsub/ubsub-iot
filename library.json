@@ -15,12 +15,7 @@
       "url": "http://ubsub.io"
     }
   ],
-  "export":
-  {
-    "include": "src"
-  },
-  "dependencies": {},
   "version": "0.1.0",
   "frameworks": "arduino",
-  "platforms": "espressif8266"
+  "platforms": "espressif8266, espressif32"
 }
