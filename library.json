@@ -15,7 +15,7 @@
       "url": "http://ubsub.io"
     }
   ],
-  "version": "0.1.0",
+  "version": "0.1.1",
   "frameworks": "arduino",
   "platforms": "espressif8266, espressif32"
 }
