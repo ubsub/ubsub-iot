@@ -91,7 +91,7 @@ static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
 static int min(int left, int right);
-static uint64_t read_u64le(uint8_t* at);
+static uint64_t read_u64le(const uint8_t* at);
 
 // Like strncpy, but null-terminates. dst should be maxLen+1 for null term
 static int pullstr(char* dst, const uint8_t *src, int maxLen);
@@ -900,7 +900,7 @@ static int min(int left, int right) {
   return left < right ? left : right;
 }
 
-static uint64_t read_u64le(uint8_t* at) {
+static uint64_t read_u64le(const uint8_t* at) {
   // Not 100% sure why this is needed.. there seems to be some issues (at least on particle)
   // for reading uint64_t's from a buffer, so looping seems to be the valid replacement
   #if PARTICLE || ARDUINO
