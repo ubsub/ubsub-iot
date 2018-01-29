@@ -79,6 +79,7 @@ const int DEFAULT_UBSUB_PORT = 3005;
     #if ARDUINO || PARTICLE
       Serial.printf("[%s] %s", level, logbuf);
       Serial.println();
+      Serial.flush();
     #else
       std::cerr << "[" << level << "] " << logbuf << std::endl;
     #endif
