@@ -91,6 +91,7 @@ static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
 static int min(int left, int right);
+static uint64_t read_u64le(uint8_t* at);
 
 // Like strncpy, but null-terminates. dst should be maxLen+1 for null term
 static int pullstr(char* dst, const uint8_t *src, int maxLen);
@@ -371,7 +372,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         return;
       }
       #ifdef UBSUB_LOG
-      uint64_t pingTime = *(uint64_t*)body;
+      uint64_t pingTime = read_u64le(body);
       int64_t roundTrip = (int64_t)now - (int64_t)pingTime;
       log("DEBUG", "Got pong. Round trip secs: %d", roundTrip);
       #endif
@@ -386,7 +387,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      uint64_t ackNonce = *(uint64_t*)(body+0);
+      uint64_t ackNonce = read_u64le(body+0);
 
       SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
       if (sub != NULL) {
@@ -394,7 +395,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         pullstr(sub->topicNameOrId, body+16, 16);
         pullstr(sub->subscriptionId, body+32, 16);
         pullstr(sub->subscriptionKey, body+48, 32);
-        sub->renewTime = *(uint64_t*)(body+80);
+        sub->renewTime = read_u64le(body+80);
 
         #ifdef UBSUB_LOG
         log("INFO", "Received subscription ack for func %d topic %s: %s key %s", sub->funcId, sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
@@ -416,7 +417,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       }
       char subscriptionKey[33];
       char event[UBSUB_MTU-48+1];
-      uint64_t funcId = *(uint64_t*)body+0;
+      uint64_t funcId = read_u64le(body+0);
       pullstr(subscriptionKey, body+8, 32);
       pullstr(event, body+40, bodyLen - 40);
 
@@ -455,7 +456,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      uint64_t msgNonce = *(uint64_t*)body;
+      uint64_t msgNonce = read_u64le(body);
       #ifdef UBSUB_LOG
         log("INFO", "Got message ack for %d", msgNonce);
         if (flag & MSG_ACK_FLAG_DUPE) {
@@ -897,6 +898,20 @@ static uint64_t getNonce64() {
 
 static int min(int left, int right) {
   return left < right ? left : right;
+}
+
+static uint64_t read_u64le(uint8_t* at) {
+  // Not 100% sure why this is needed.. there seems to be some issues (at least on particle)
+  // for reading uint64_t's from a buffer, so looping seems to be the valid replacement
+  #if PARTICLE || ARDUINO
+    uint64_t ret = 0;
+    for (int8_t i=7; i>=0; --i) {
+        ret = (ret << 8) | at[i];
+    }
+    return ret;
+  #else
+    return *(uint64_t*)at;
+  #endif
 }
 
 static int pullstr(char* dst, const uint8_t *src, int maxLen) {
