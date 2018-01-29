@@ -1,6 +1,7 @@
 #include "ubsub.h"
 #include "sha256.h"
 #include "salsa20.h"
+#include "binio.h"
 
 #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error Little endian ordering required for binary serialization
@@ -84,6 +85,19 @@ const int DEFAULT_UBSUB_PORT = 3005;
       std::cerr << "[" << level << "] " << logbuf << std::endl;
     #endif
   }
+
+  static char hextable[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+  // Nieve helper that stores in local memory. Don't use more than once per log msg (or copy out)
+  template <typename T> static const char* tohexstr(T val) {
+    static char buf[32];
+    int i=0;
+    for (; i<(int)sizeof(T)*2; ++i) {
+      buf[sizeof(T)*2-i-1] = hextable[val & 0xF];
+      val >>= 4;
+    }
+    buf[i] = '\0';
+    return buf;
+  }
 #endif
 
 //static char* getUniqueDeviceId();
@@ -92,7 +106,6 @@ static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
 static int min(int left, int right);
-static uint64_t read_u64le(const uint8_t* at);
 
 // Like strncpy, but null-terminates. dst should be maxLen+1 for null term
 static int pullstr(char* dst, const uint8_t *src, int maxLen);
@@ -219,7 +232,7 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
 
   *(uint16_t*)command = this->localPort;
   pushstr(command+2, topicNameOrId, 32);
-  *(uint64_t*)(command+34) = funcId;
+  write_le<uint64_t>(command+34, funcId);
   *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
 
   // Register subscription in LL
@@ -234,7 +247,7 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
   this->subs = sub;
 
   #ifdef UBSUB_LOG
-  log("INFO", "Listening to '%s' with funcId %d...", topicNameOrId, funcId);
+  log("INFO", "Listening to '%s' with funcId 0x%s...", topicNameOrId, tohexstr(funcId));
   #endif
 
   this->sendCommand(
@@ -329,7 +342,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     return;
   }
 
-  uint64_t nonce = *(uint64_t*)(buf+1);
+  uint64_t nonce = read_le<uint64_t>(buf+1);
   char deviceId[17];
   pullstr(deviceId, buf+9, 16);
 
@@ -363,7 +376,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, len - UBSUB_CRYPTHEADER_LEN - UBSUB_SIGNATURE_LEN);
   }
 
-  uint64_t ts = *(uint64_t*)(buf + 25);
+  uint64_t ts = read_le<uint64_t>(buf+25);
   uint16_t cmd = *(uint16_t*)(buf + 33);
   uint16_t bodyLen = *(uint16_t*)(buf+35);
   uint8_t flag = *(uint8_t*)(buf+37);
@@ -390,8 +403,8 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         return;
       }
       #ifdef UBSUB_LOG
-      uint64_t pingTime = read_u64le(body);
-      int64_t roundTrip = (int64_t)now - (int64_t)pingTime;
+      uint64_t pingTime = read_le<uint64_t>(body);
+      int32_t roundTrip = (int32_t)((int64_t)now - (int64_t)pingTime);
       log("DEBUG", "Got pong. Round trip secs: %d", roundTrip);
       #endif
       if (now > this->lastPong) {
@@ -405,7 +418,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      uint64_t ackNonce = read_u64le(body+0);
+      uint64_t ackNonce = read_le<uint64_t>(body+0);
 
       SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
       if (sub != NULL) {
@@ -413,14 +426,14 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         pullstr(sub->topicNameOrId, body+16, 16);
         pullstr(sub->subscriptionId, body+32, 16);
         pullstr(sub->subscriptionKey, body+48, 32);
-        sub->renewTime = read_u64le(body+80);
+        sub->renewTime = read_le<uint64_t>(body+80);
 
         #ifdef UBSUB_LOG
-        log("INFO", "Received subscription ack for func %d topic %s: %s key %s", sub->funcId, sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
+        log("INFO", "Received subscription ack for func 0x%s topic %s: %s key %s", tohexstr(sub->funcId), sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
         #endif
       } else {
         #ifdef UBSUB_LOG
-        log("WARN", "Received sub ack for unknown subscription %d", ackNonce);
+        log("WARN", "Received sub ack for unknown subscription 0x%s", tohexstr(ackNonce));
         #endif
       }
 
@@ -435,12 +448,12 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       }
       char subscriptionKey[33];
       char event[UBSUB_MTU-48+1];
-      uint64_t funcId = read_u64le(body+0);
+      uint64_t funcId = read_le<uint64_t>(body+0);
       pullstr(subscriptionKey, body+8, 32);
       pullstr(event, body+40, bodyLen - 40);
 
       #ifdef UBSUB_LOG
-      log("INFO", "Received event from func %d with key %s: %s", funcId, subscriptionKey, event);
+      log("INFO", "Received event from func 0x%s with key %s: %s", tohexstr(funcId), subscriptionKey, event);
       #endif
 
       // Ack, if requested (before processing, in case processing takes time)
@@ -462,7 +475,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         #endif
       } else {
         #ifdef UBSUB_LOG
-        log("WARN", "Received subscription message for unknown func %d", funcId);
+        log("WARN", "Received subscription message for unknown func 0x%s", tohexstr(funcId));
         #endif
       }
 
@@ -474,9 +487,9 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      uint64_t msgNonce = read_u64le(body);
+      uint64_t msgNonce = read_le<uint64_t>(body);
       #ifdef UBSUB_LOG
-        log("INFO", "Got message ack for %d", msgNonce);
+        log("INFO", "Got message ack for 0x%s", tohexstr(msgNonce));
         if (flag & MSG_ACK_FLAG_DUPE) {
           log("WARN", "Msg ack was dupe");
         }
@@ -517,7 +530,7 @@ QueuedMessage* Ubsub::queueMessage(const uint8_t* buf, int bufLen, const uint64_
   this->queue = msg;
 
   #ifdef UBSUB_LOG
-  log("DEBUG", "Queued %d bytes with nonce %d for retry", bufLen, nonce);
+  log("DEBUG", "Queued %d bytes with nonce 0x%s for retry", bufLen, tohexstr(nonce));
   #endif
 
   return msg;
@@ -529,7 +542,7 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
   while(msg != NULL) {
     if (msg->cancelNonce == nonce) {
       #ifdef UBSUB_LOG
-      log("DEBUG", "Removing %d from queue", nonce);
+      log("DEBUG", "Removing 0x%s from queue", tohexstr(nonce));
       #endif
       *prevNext = msg->next;
       free(msg->buf);
@@ -549,7 +562,7 @@ void Ubsub::processQueue() {
   while(msg != NULL) {
     if (now >= msg->retryTime) {
       #ifdef UBSUB_LOG
-      log("INFO", "Retrying message %d", msg->cancelNonce);
+      log("INFO", "Retrying message 0x%s", tohexstr(msg->cancelNonce));
       #endif
       msg->retryTime = now + UBSUB_PACKET_RETRY_SECONDS;
       msg->retryNumber++;
@@ -635,7 +648,7 @@ void Ubsub::renewSubscriptions() {
 
       *(uint16_t*)command = this->localPort;
       pushstr(command+2, sub->topicNameOrId, 32);
-      *(uint64_t*)(command+34) = sub->funcId;
+      write_le<uint64_t>(command+34, sub->funcId);
       *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
 
       this->sendCommand(
@@ -835,11 +848,11 @@ static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const c
 
   // Set up CrpyHeader
   buf[0] = 0x3; // UDPv3 (encrypted with salsa20)
-  *(uint64_t*)(buf+1) = nonce; // 64 bit nonce
+  write_le<uint64_t>(buf+1, nonce); // 64 bit nonce
   memcpy(buf+9, deviceId, deviceIdLen);
 
   // Set header
-  *(uint64_t*)(buf+25) = ts;
+  write_le<uint64_t>(buf+25, ts);
   *(uint16_t*)(buf+33) = cmd;
   *(uint16_t*)(buf+35) = (uint16_t)bodyLen;
   *(uint8_t*)(buf+37) = flag;
@@ -916,20 +929,6 @@ static uint64_t getNonce64() {
 
 static int min(int left, int right) {
   return left < right ? left : right;
-}
-
-static uint64_t read_u64le(const uint8_t* at) {
-  // Not 100% sure why this is needed.. there seems to be some issues (at least on particle)
-  // for reading uint64_t's from a buffer, so looping seems to be the valid replacement
-  #if PARTICLE || ARDUINO
-    uint64_t ret = 0;
-    for (int8_t i=7; i>=0; --i) {
-        ret = (ret << 8) | at[i];
-    }
-    return ret;
-  #else
-    return *(uint64_t*)at;
-  #endif
 }
 
 static int pullstr(char* dst, const uint8_t *src, int maxLen) {
