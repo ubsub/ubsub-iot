@@ -127,7 +127,6 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
   this->queue = NULL;
   this->autoRetry = true;
   this->subs = NULL;
-  this->initSocket();
 
   #ifdef UBSUB_LOG
   log("INFO", "DID: %s", this->deviceId);
@@ -135,6 +134,8 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
 }
 
 bool Ubsub::connect(int timeout) {
+  this->initSocket();
+
   this->lastPong = 0;
   uint64_t start = getTime();
   while(getTime() < start + timeout) {
@@ -658,11 +659,17 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int c
 // PRIVATE multiplatform socket code
 
 int Ubsub::receiveData() {
+  if (!this->socketInit) {
+    this->setError(UBSUB_ERR_NETWORK);
+    return 0;
+  }
+
   static uint8_t buf[UBSUB_MTU];
   int received = 0;
-  int rlen = 0;
 
   while (true) {
+    int rlen = -1;
+
     #if ARDUINO
       if (this->sock.parsePacket() > 0) {
         rlen = this->sock.read(buf, UBSUB_MTU);
@@ -677,7 +684,7 @@ int Ubsub::receiveData() {
       rlen = recvfrom(this->sock, buf, UBSUB_MTU, 0x0, (struct sockaddr*)&from, &fromlen);
     #endif
 
-    if (rlen <= 0)
+    if (rlen < 0)
       break;
 
     this->processPacket(buf, rlen);

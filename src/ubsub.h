@@ -127,7 +127,7 @@ public:
 
   // Attempts to establish a connection with UbSub.io
   // If succeeds returns true.  If fails after timeout, returns false
-  // NOT REQUIRED to call, but will guarantee a connection has been established
+  // REQUIRED to call, at least during setup, to listen on socket
   bool connect(int timeout = 10);
 
   // Send message to a given topic on ubsub. Topic does not have to belong
