@@ -36,6 +36,8 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define DEVICE_ID_MAX_LEN 16
 
 #define MSG_FLAG_ACK 0x1
+#define MSG_FLAG_EXTERNAL 0x2
+#define MSG_FLAG_CREATE 0x4
 #define MSG_ACK_FLAG_DUPE 0x1
 
 #define SUB_FLAG_ACK 0x1
@@ -185,7 +187,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   log("INFO", "Publishing message to topic %s with %d bytes...", topicId, msgLen);
   #endif
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK, command, msgLen + 64);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, command, msgLen + 64);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {

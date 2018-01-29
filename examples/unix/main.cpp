@@ -14,10 +14,10 @@ int main() {
     std::cout << "Failed to connect" << std::endl;
   }
 
-  //client.createTopic("testy", true);
   client.listenToTopic("testy", myMethod);
 
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
+  client.callFunction("test-autocreate", "hi there direct");
 
   while(true) {
     client.processEvents();
