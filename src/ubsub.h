@@ -125,6 +125,8 @@ public:
 
   Ubsub(const char *deviceId, const char *deviceKey);
 
+  ~Ubsub();
+
   // Attempts to establish a connection with UbSub.io
   // If succeeds returns true.  If fails after timeout, returns false
   // REQUIRED to call, at least during setup, to listen on socket

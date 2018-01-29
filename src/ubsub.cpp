@@ -134,6 +134,23 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
   #endif
 }
 
+Ubsub::~Ubsub() {
+  SubscribedFunc *sfunc = this->subs;
+  while(sfunc != NULL) {
+    SubscribedFunc *curr = sfunc;
+    sfunc = sfunc->next;
+    free(curr);
+  }
+
+  QueuedMessage* qmsg = this->queue;
+  while(qmsg != NULL) {
+    QueuedMessage *curr = qmsg;
+    qmsg = qmsg->next;
+    free(curr->buf);
+    free(curr);
+  }
+}
+
 bool Ubsub::connect(int timeout) {
   this->initSocket();
 
@@ -681,7 +698,7 @@ int Ubsub::receiveData() {
       }
     #else
       struct sockaddr_in from;
-      socklen_t fromlen;
+      socklen_t fromlen = 0;
       rlen = recvfrom(this->sock, buf, UBSUB_MTU, 0x0, (struct sockaddr*)&from, &fromlen);
     #endif
 
