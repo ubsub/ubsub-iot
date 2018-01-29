@@ -48,6 +48,8 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define SUB_MSG_FLAG_ACK 0x1
 #define SUB_MSG_FLAG_WAS_UNWRAPPED 0x2
 
+#define SUB_MSG_ACK_FLAG_REJECTED 0x2
+
 #define CMD_SUB 0x1
 #define CMD_SUB_ACK 0x2
 #define CMD_UNSUB 0x3
@@ -456,24 +458,29 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       log("INFO", "Received event from func 0x%s with key %s: %s", tohexstr(funcId), subscriptionKey, event);
       #endif
 
-      // Ack, if requested (before processing, in case processing takes time)
-      if (flag & SUB_MSG_FLAG_ACK) {
-        uint8_t msgAck[8];
-        memset(msgAck, 0, sizeof(msgAck));
-        *(uint64_t*)msgAck = nonce;
-        this->sendCommand(CMD_SUB_MSG_ACK, 0x0, false, msgAck, sizeof(msgAck));
-      }
+      // Ack data, if requested. Defer sending until we know flag
+      uint8_t msgAck[8];
+      write_le(msgAck, nonce);
 
       // Call correct function to notify a message has arrived
       SubscribedFunc* sub = this->getSubscribedFuncByFuncId(funcId);
       if (sub != NULL && strcmp(sub->subscriptionKey, subscriptionKey) == 0) {
+        // Send ack before processing  in case slow
+        if (flag & SUB_MSG_FLAG_ACK)
+          this->sendCommand(CMD_SUB_MSG_ACK, 0x0, false, msgAck, sizeof(msgAck));
+
         if (sub->callback != NULL)
           sub->callback(event);
+
       } else if (sub != NULL) {
+        if (flag & SUB_MSG_FLAG_ACK)
+          this->sendCommand(CMD_SUB_MSG_ACK, SUB_MSG_ACK_FLAG_REJECTED, false, msgAck, sizeof(msgAck));
         #ifdef UBSUB_LOG
         log("WARN", "Received subscription message, but keys don't match: %s != %s", sub->subscriptionKey, subscriptionKey);
         #endif
       } else {
+        if (flag & SUB_MSG_FLAG_ACK)
+          this->sendCommand(CMD_SUB_MSG_ACK, SUB_MSG_ACK_FLAG_REJECTED, false, msgAck, sizeof(msgAck));
         #ifdef UBSUB_LOG
         log("WARN", "Received subscription message for unknown func 0x%s", tohexstr(funcId));
         #endif
