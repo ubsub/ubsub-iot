@@ -1,0 +1,8 @@
+# Arduino library keyword file
+Ubsub	KEYWORD1
+connect	KEYWORD2
+publishEvent	KEYWORD2
+listenToTopic	KEYWORD2
+createFunction	KEYWORD2
+callFunction	KEYWORD2
+processEvents	KEYWORD2
