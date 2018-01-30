@@ -390,9 +390,15 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
     return;
   }
 
+  processCommand(cmd, flag, nonce, body, bodyLen);
+}
+
+void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t* body, int bodyLen) {
   #ifdef UBSUB_LOG
   log("DEBUG", "Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
   #endif
+
+  uint64_t now = getTime();
 
   switch(cmd) {
     case CMD_PONG: // Pong

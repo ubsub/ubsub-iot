@@ -103,6 +103,7 @@ private:
 
   int receiveData();
   void processPacket(uint8_t *buf, int len);
+  void processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t* body, int bodyLen);
 
   void ping();
 
