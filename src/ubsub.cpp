@@ -45,21 +45,24 @@ const int DEFAULT_UBSUB_PORT = 3005;
 #define SUB_FLAG_UNWRAP 0x2
 #define SUB_FLAG_MSG_NEED_ACK 0x4
 
+#define SUB_ACK_FLAG_DUPE 0x1
+#define SUB_ACK_FLAG_TOPIC_NOT_EXIST 0x2
+
 #define SUB_MSG_FLAG_ACK 0x1
 #define SUB_MSG_FLAG_WAS_UNWRAPPED 0x2
 
 #define SUB_MSG_ACK_FLAG_REJECTED 0x2
 
-#define CMD_SUB 0x1
-#define CMD_SUB_ACK 0x2
-#define CMD_UNSUB 0x3
-#define CMD_UNSUB_ACK 0x4
-#define CMD_SUB_MSG 0x5
+#define CMD_SUB         0x1
+#define CMD_SUB_ACK     0x2
+#define CMD_UNSUB       0x3
+#define CMD_UNSUB_ACK   0x4
+#define CMD_SUB_MSG     0x5
 #define CMD_SUB_MSG_ACK 0x6
-#define CMD_MSG 0xA
-#define CMD_MSG_ACK 0xB
-#define CMD_PING 0x10
-#define CMD_PONG 0x11
+#define CMD_MSG         0xA
+#define CMD_MSG_ACK     0xB
+#define CMD_PING        0x10
+#define CMD_PONG        0x11
 
 #ifdef UBSUB_LOG
   #if !(ARDUINO || PARTICLE)
@@ -108,12 +111,6 @@ static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
 static int min(int left, int right);
-
-// Like strncpy, but null-terminates. dst should be maxLen+1 for null term
-static int pullstr(char* dst, const uint8_t *src, int maxLen);
-
-// Pushes string into dst buf, will null-term entire remaining length (if any)
-static int pushstr(uint8_t* dst, const char *src, int len);
 
 // Ubsub Implementation
 
@@ -422,20 +419,26 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
       }
       uint64_t ackNonce = read_le<uint64_t>(body+0);
 
-      SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
-      if (sub != NULL) {
-        sub->requestNonce = 0;
-        pullstr(sub->topicNameOrId, body+16, 16);
-        pullstr(sub->subscriptionId, body+32, 16);
-        pullstr(sub->subscriptionKey, body+48, 32);
-        sub->renewTime = read_le<uint64_t>(body+80);
+      if (!(flag & SUB_ACK_FLAG_TOPIC_NOT_EXIST)) {
+        SubscribedFunc* sub = this->getSubscribedFuncByNonce(ackNonce);
+        if (sub != NULL) {
+          sub->requestNonce = 0;
+          pullstr(sub->topicNameOrId, body+16, 16);
+          pullstr(sub->subscriptionId, body+32, 16);
+          pullstr(sub->subscriptionKey, body+48, 32);
+          sub->renewTime = read_le<uint64_t>(body+80);
 
-        #ifdef UBSUB_LOG
-        log("INFO", "Received subscription ack for func 0x%s topic %s: %s key %s", tohexstr(sub->funcId), sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
-        #endif
+          #ifdef UBSUB_LOG
+          log("INFO", "Received subscription ack for func 0x%s topic %s: %s key %s", tohexstr(sub->funcId), sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
+          #endif
+        } else {
+          #ifdef UBSUB_LOG
+          log("WARN", "Received sub ack for unknown subscription 0x%s", tohexstr(ackNonce));
+          #endif
+        }
       } else {
         #ifdef UBSUB_LOG
-        log("WARN", "Received sub ack for unknown subscription 0x%s", tohexstr(ackNonce));
+        log("WARN", "Topic does not exist on server and did not create for nonce 0x%s", tohexstr(ackNonce));
         #endif
       }
 
@@ -936,29 +939,4 @@ static uint64_t getNonce64() {
 
 static int min(int left, int right) {
   return left < right ? left : right;
-}
-
-static int pullstr(char* dst, const uint8_t *src, int maxLen) {
-  int n = 0;
-  for (; n<maxLen; ++n) {
-    char c = src[n];
-    if (c == '\0')
-      break;
-    dst[n] = c;
-  }
-  dst[n] = '\0';
-  return n;
-}
-
-static int pushstr(uint8_t* dst, const char *src, int len) {
-  int n = 0;
-  for (; n<len; ++n) {
-    char c = src[n];
-    if (c == '\0')
-      break;
-    dst[n] = c;
-  }
-  for (;n<len; ++n)
-    dst[n] = '\0';
-  return n;
 }

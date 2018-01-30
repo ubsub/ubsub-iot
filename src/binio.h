@@ -30,4 +30,31 @@ template <typename T> static inline void write_le(uint8_t* to, const T& val) {
   #endif
 }
 
+// Like strncpy, but null-terminates. dst should be maxLen+1 for null term
+static int pullstr(char* dst, const uint8_t *src, int maxLen) {
+  int n = 0;
+  for (; n<maxLen; ++n) {
+    char c = src[n];
+    if (c == '\0')
+      break;
+    dst[n] = c;
+  }
+  dst[n] = '\0';
+  return n;
+}
+
+// Pushes string into dst buf, will null-term entire remaining length (if any)
+static int pushstr(uint8_t* dst, const char *src, int len) {
+  int n = 0;
+  for (; n<len; ++n) {
+    char c = src[n];
+    if (c == '\0')
+      break;
+    dst[n] = c;
+  }
+  for (;n<len; ++n)
+    dst[n] = '\0';
+  return n;
+}
+
 #endif
