@@ -23,7 +23,7 @@ class Version:
     return str(self)
 
 def sh(s):
-  subprocess.call(s, shell=True)
+  subprocess.check_call(s, shell=True)
 
 # Get and bump version
 library = json.loads(open('library.json', 'r').read())
