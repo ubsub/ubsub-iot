@@ -4,7 +4,29 @@
 
 C++ implementation of ubsub's UDP protocol for secure and reliable bidirectional communication for embedded devices.
 
-# Usage
+# Installation
+
+## Particle.io libraries
+
+The latest version of this library will be kept up-to-date on particle.io
+
+It can be found on the web IDE, or via the CLI
+
+```sh
+particle library search ubsub
+```
+
+## Platformio.org libraries
+
+This library is also published to platformio [here](http://platformio.org/lib/show/2118/Ubsub).
+
+## Manual
+
+Head over to the [release tab](https://github.com/ubsub/ubsub-iot/releases), download the zip
+file, and include it in your project.  With **Arduino**, you're able to do this via their IDE,
+and on other projects, you can simply add all the files in `src/` to your project.
+
+# Example Usage
 
 ## Simple Unix Example
 
