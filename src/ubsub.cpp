@@ -27,8 +27,8 @@
   #include <fcntl.h>
 #endif
 
-const char* DEFAULT_UBSUB_ROUTER = "router.ubsub.io";
-const int DEFAULT_UBSUB_PORT = 3005;
+const char* DEFAULT_UBSUB_ROUTER = "udp.ubsub.io";
+const int DEFAULT_UBSUB_PORT = 4001;
 
 // Generates outer & inner packet, running it through cryptography
 #define UBSUB_CRYPTHEADER_LEN 25
