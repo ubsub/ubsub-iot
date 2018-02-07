@@ -25,6 +25,7 @@ typedef void (*TopicCallback)(const char* arg);
 #define UBSUB_CONNECTION_TIMEOUT 120
 #define UBSUB_SUBSCRIPTION_TTL 60*5 // 5 minutes
 #define UBSUB_NONCE_RR_COUNT 32 // Number of nonces to track
+#define UBSUB_TIME_SYNC_FREQ 12*60*60
 
 // If defined, will log to stderr on unix, and Serial on embedded
 // Not enabled by default but feel free to build with -DUBSUB_LOG or uncomment below
@@ -76,6 +77,10 @@ public:
 
   ~Ubsub();
 
+  // Time sync is enabled by default, since its critical to this functionality
+  // But if you'd like to disable it for some reason, you can call this
+  void enableAutoSyncTime(bool enabled);
+
   // Attempts to establish a connection with UbSub.io
   // If succeeds returns true.  If fails after timeout, returns false
   // REQUIRED to call, at least during setup, to listen on socket
@@ -114,6 +119,7 @@ private: // Config
   int port;
   int localPort;
   bool autoRetry;
+  bool autoSyncTime;
 
   UDPSocket sock;
   bool socketInit;
@@ -123,6 +129,8 @@ private: // Config
 private: // State
   uint64_t lastPong;
   uint64_t lastPing;
+
+  uint64_t lastTimeSync;
 
   QueuedMessage* queue;
   SubscribedFunc* subs;
@@ -144,6 +152,8 @@ private:
   void processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t* body, int bodyLen);
 
   void ping();
+
+  void syncTime(int timeout=0);
 
   void setError(int errcode);
 

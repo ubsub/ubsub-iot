@@ -31,6 +31,8 @@
 const char* DEFAULT_UBSUB_ROUTER = "iot.ubsub.io";
 const int DEFAULT_UBSUB_PORT = 4001;
 
+const char* DEFAULT_NTP_SERVER = "pool.ntp.org";
+
 // Generates outer & inner packet, running it through cryptography
 #define UBSUB_CRYPTHEADER_LEN 25
 #define UBSUB_HEADER_LEN 13
@@ -143,6 +145,9 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
   this->autoRetry = true;
   this->subs = NULL;
 
+  this->autoSyncTime = true;
+  this->lastTimeSync = 0;
+
   #ifdef UBSUB_LOG
   log("INFO", "DID: %s", this->deviceId);
   #endif
@@ -165,10 +170,22 @@ Ubsub::~Ubsub() {
   }
 }
 
+void Ubsub::enableAutoSyncTime(bool enabled) {
+  this->autoSyncTime = enabled;
+  this->lastTimeSync = 0;
+}
+
 bool Ubsub::connect(int timeout) {
   #ifdef UBSUB_LOG
   log("INFO", "Ubsub connecting (local: %d)...", this->localPort);
   #endif
+
+  //TODO: Make sure WiFi established before clock sync
+
+  // Sync time
+  if (this->autoSyncTime) {
+    this->syncTime(timeout);
+  }
 
   this->initSocket();
 
@@ -286,6 +303,11 @@ const int Ubsub::getLastError() {
 }
 
 void Ubsub::processEvents() {
+  // Kick off time sync if needed
+  if (this->autoSyncTime && getTime() >= this->lastTimeSync + UBSUB_TIME_SYNC_FREQ) {
+    this->syncTime();
+  }
+
   // Send ping if necessary
   // If we don't have any subs, no reason to constantly ping, as it's mostly for NAT negotiation
   if (this->subs != NULL) {
@@ -850,6 +872,28 @@ void Ubsub::closeSocket() {
     #endif
     this->socketInit = false;
   }
+}
+
+void Ubsub::syncTime(int timeout) {
+  #ifdef UBSUB_LOG
+  log("INFO", "Synchronizing time...");
+  #endif
+
+  #ifdef PARTICLE
+    uint64_t timeoutTime = getTime() + timeout;
+    Particle.syncTime();
+    while(Particle.syncTimePending() && getTime() < timeoutTime) delay(50);
+  #elif ARDUINO
+    uint64_t timeoutTime = getTime() + timeout;
+    configTime(0, 0, DEFAULT_NTP_SERVER);
+    while(!time(NULL) && getTime() < timeoutTime) delay(50);
+  #else
+    #ifdef UBSUB_LOG
+    log("WARN", "Time syncing not supported on this platform");
+    #endif
+  #endif
+
+  this->lastTimeSync = getTime();
 }
 
 static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
