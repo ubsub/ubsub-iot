@@ -1,4 +1,17 @@
-language: cpp
-sudo: false
-script:
-    - g++ src/*.cpp examples/unix/main.cpp -Wall -Werror
+matrix:
+  include:
+    - language: cpp
+      sudo: false
+      script:
+        - g++ src/*.cpp examples/unix/main.cpp -Wall -Werror
+        - g++ src/*.cpp examples/unix/main.cpp -Wall -Werror -DUBSUB_LOG
+
+    - language: python
+      python:
+          - "2.7"
+      env:
+          - PLATFORMIO_CI_SRC=examples/usage/usage.ino
+      install:
+          - pip install -U platformio
+      script:
+          - platformio ci --lib="." --board=nodemcuv2 --board=huzzah --board=esp01_1m --board=thing
