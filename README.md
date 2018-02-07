@@ -95,6 +95,79 @@ void loop() {
 }
 ```
 
+# API
+
+## Ubsub(const char* deviceId, const char* deviceKey)
+
+Create an instance of the Ubsub client with the given device info.
+
+Device id/key can either be user id/key OR token id/key.
+
+## Ubsub::enableAutoSyncTime(bool)
+
+**Support**: Arduino, Particle
+
+Enables/disables the client auto-syncing time on devices.
+
+## bool Ubsub::connect([timeout])
+
+**Returns:** `true` on success
+
+Attempts to establish a connection to ubsub.io.  Will wait for WiFi first,
+sync time if asked to, and negotiate NAT routing.
+
+**Must be called prior to any other functions.**
+
+## Ubsub::publishEvent(topicId, topicKey, msg)
+
+Publish an event to Ubsub.io topic.
+
+## Ubsub::listenToTopic(topicNameOrId, callback)
+
+Listen to a topic on ubsub.io
+
+Callback: `void callbackfunc(const char* arg)`
+
+## Ubsub:createFunction(topicNameOrId, callback)
+
+Same as listenToTopic, except will create the topic if not exist
+
+## Ubsub::callFunction(name, arg)
+## Ubsub::callFunction(name)
+
+Call a topic, by name, with an optional argument.
+
+If the arg is JSON, it will be interpreted as such, otherwise
+it will be wrapped like so: `{"payload": <arg>}`
+
+## processEvents()
+
+Receives, pings, and retries any outstanding events.  Must be called frequently, such as in your `void loop(){}` function.
+
+## int getLastError()
+
+Gets the last error code that has occurred in the client. `0` is no-error.
+
+**Errors:** (from [ubsub.h](ubsub.h))
+
+```c
+#define UBSUB_ERR_INVALID_PACKET -1
+#define UBSUB_ERR_BAD_VERSION -2
+#define UBSUB_ERR_USER_MISMATCH -3
+#define UBSUB_ERR_BAD_SIGNATURE -4
+#define UBSUB_ERR_TIMEOUT -5
+#define UBSUB_ERR_EXCEEDS_MTU -6
+#define UBSUB_ERR_SOCKET -7
+#define UBSUB_ERR_SOCKET_BIND -8
+#define UBSUB_ERR_NETWORK -9
+#define UBSUB_ERR_SEND -10
+#define UBSUB_ERR_BAD_REQUEST -11
+#define UBSUB_ERR_NONCE_DUPE -12
+#define UBSUB_MISSING_ARGS -50
+#define UBSUB_ERR_UNKNOWN -1000
+#define UBSUB_ERR_MALLOC -2000
+```
+
 # Compatability
 
  * Unix/Linux
