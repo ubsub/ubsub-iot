@@ -382,8 +382,8 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
   }
 
   uint64_t ts = read_le<uint64_t>(buf+25);
-  uint16_t cmd = *(uint16_t*)(buf + 33);
-  uint16_t bodyLen = *(uint16_t*)(buf+35);
+  uint16_t cmd = read_le<uint16_t>(buf+33);
+  uint16_t bodyLen = read_le<uint16_t>(buf+35);
   uint8_t flag = *(uint8_t*)(buf+37);
 
   uint8_t* body = buf + 38;
