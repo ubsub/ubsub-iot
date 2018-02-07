@@ -180,42 +180,65 @@ bool Ubsub::connect(int timeout) {
   log("INFO", "Ubsub connecting (local: %d)...", this->localPort);
   #endif
 
-  //TODO: Make sure WiFi established before clock sync
+  uint64_t timeoutTime = getTime() + timeout;
+
+  while(true) {
+    #ifdef ARDUINO
+    if (WiFi.status() == WL_CONNECTED)
+      break;
+    delay(10);
+    #elif PARTICLE
+    if (WiFi.ready())
+      break;
+    delay(10);
+    #else
+    break;
+    #endif
+    if (getTime() > timeoutTime)
+      return false;
+  }
 
   // Sync time
   if (this->autoSyncTime) {
     this->syncTime(timeout);
+
+    // Clock might be different now
+    // Pick a new timeout time
+    timeoutTime = getTime() + timeout;
   }
 
   this->initSocket();
 
   this->lastPong = 0;
-  uint64_t start = getTime();
-  while(getTime() < start + timeout) {
-    // If WiFi isn't connected, wait for it
-    #ifdef ARDUINO
-    if (WiFi.status() != WL_CONNECTED)
-      continue;
-    #elif PARTICLE
-    if (!WiFi.ready())
-      continue;
-    #endif
-
+  while(true) {
     #ifdef UBSUB_LOG
     log("DEBUG", "Attempting connect...");
     #endif
     this->ping();
 
     // Wait for pong
-    uint64_t waitStart = getTime();
-    while(getTime() < waitStart + 1) {
+    uint64_t waitEnd = getTime() + 1;
+    while(getTime() < waitEnd && this->lastPong <= 0) {
       this->receiveData();
-      if (this->lastPong > 0) {
-        return true;
-      }
+      #if ARDUINO || PARTICLE
+      delay(10);
+      #endif
+    }
+
+    if (this->lastPong > 0) {
+      // Got ping
+      break;
+    }
+
+    if (getTime() > timeoutTime) {
+      return false;
     }
   }
-  return false;
+
+  #ifdef UBSUB_LOG
+  log("INFO", "Connection established");
+  #endif
+  return true;
 }
 
 
