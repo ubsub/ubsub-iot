@@ -235,10 +235,10 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
 
   uint64_t funcId = getNonce64();
 
-  *(uint16_t*)command = this->localPort;
+  write_le<uint16_t>(command+0, this->localPort);
   pushstr(command+2, topicNameOrId, 32);
   write_le<uint64_t>(command+34, funcId);
-  *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
+  write_le<uint16_t>(command+42, UBSUB_SUBSCRIPTION_TTL);
 
   // Register subscription in LL
   SubscribedFunc* sub = (SubscribedFunc*)malloc(sizeof(SubscribedFunc));
@@ -619,7 +619,7 @@ bool Ubsub::hasNonce(const uint64_t &nonce) {
 
 void Ubsub::ping() {
   uint8_t buf[2];
-  *(uint16_t*)buf = (uint16_t)this->localPort;
+  write_le<uint16_t>(buf+0, this->localPort);
   this->sendCommand(CMD_PING, 0x0, false, buf, 2);
 }
 
@@ -668,10 +668,10 @@ void Ubsub::renewSubscriptions() {
       uint8_t command[COMMAND_LEN];
       memset(command, 0, COMMAND_LEN);
 
-      *(uint16_t*)command = this->localPort;
+      write_le<uint16_t>(command+0, this->localPort);
       pushstr(command+2, sub->topicNameOrId, 32);
       write_le<uint64_t>(command+34, sub->funcId);
-      *(uint16_t*)(command+42) = UBSUB_SUBSCRIPTION_TTL;
+      write_le<uint16_t>(command+42, UBSUB_SUBSCRIPTION_TTL);
 
       this->sendCommand(
         CMD_SUB,
@@ -875,8 +875,8 @@ static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const c
 
   // Set header
   write_le<uint64_t>(buf+25, ts);
-  *(uint16_t*)(buf+33) = cmd;
-  *(uint16_t*)(buf+35) = (uint16_t)bodyLen;
+  write_le<uint16_t>(buf+33, cmd);
+  write_le<uint16_t>(buf+35, (uint16_t)bodyLen);
   *(uint8_t*)(buf+37) = flag;
 
   // Copy body to buffer
