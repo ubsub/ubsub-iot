@@ -20,6 +20,12 @@ particle library search ubsub
 
 This library is also published to platformio [here](http://platformio.org/lib/show/2118/Ubsub).
 
+You can use it by typing:
+
+```sh
+platformio lib install ubsub
+```
+
 ## Manual
 
 Head over to the [release tab](https://github.com/ubsub/ubsub-iot/releases), download the zip
