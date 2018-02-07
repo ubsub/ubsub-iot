@@ -69,6 +69,44 @@ typedef struct SubscribedFunc {
 } SubscribedFunc;
 
 class Ubsub {
+public:
+  Ubsub(const char *deviceId, const char *deviceKey, const char *ubsubHost, int ubsubPort);
+
+  Ubsub(const char *deviceId, const char *deviceKey);
+
+  ~Ubsub();
+
+  // Attempts to establish a connection with UbSub.io
+  // If succeeds returns true.  If fails after timeout, returns false
+  // REQUIRED to call, at least during setup, to listen on socket
+  bool connect(int timeout = 10);
+
+  // Send message to a given topic on ubsub. Topic does not have to belong
+  // to the user.
+  // The msg can either be serialized JSON OR a simple string that will be encapsulated on the server
+  int publishEvent(const char *topicId, const char *topicKey, const char *msg);
+
+  // Listen to a given topic for events. Similar to creating a function
+  // but will listen to an existing topic
+  void listenToTopic(const char *topicNameOrId, TopicCallback callback);
+
+  // Create a new function that can be invoked by another caller, and immediately listen to it
+  // This function will be a topic in ubsub
+  void createFunction(const char *name, TopicCallback callback);
+
+  // Call function on another device
+  int callFunction(const char *name, const char *arg);
+  int callFunction(const char *name);
+
+  // processEvents() needs to be called frequently.  It takes care of things such as:
+  // - Re-sending any queued outbound messages
+  // - Checking for, and processing, incoming data
+  // - Occassionally handling pings to keep connection alive (or reconnecting if needed)
+  void processEvents();
+
+  // Gets the last error, or NULL if no error
+  const int getLastError();
+
 private: // Config
   const char* deviceId;
   const char* deviceKey;
@@ -121,43 +159,6 @@ private:
   void invalidateSubscriptions(); // Make so all have to be renewed
   void renewSubscriptions();
 
-public:
-  Ubsub(const char *deviceId, const char *deviceKey, const char *ubsubHost, int ubsubPort);
-
-  Ubsub(const char *deviceId, const char *deviceKey);
-
-  ~Ubsub();
-
-  // Attempts to establish a connection with UbSub.io
-  // If succeeds returns true.  If fails after timeout, returns false
-  // REQUIRED to call, at least during setup, to listen on socket
-  bool connect(int timeout = 10);
-
-  // Send message to a given topic on ubsub. Topic does not have to belong
-  // to the user.
-  // The msg can either be serialized JSON OR a simple string that will be encapsulated on the server
-  int publishEvent(const char *topicId, const char *topicKey, const char *msg);
-
-  // Listen to a given topic for events. Similar to creating a function
-  // but will listen to an existing topic
-  void listenToTopic(const char *topicNameOrId, TopicCallback callback);
-
-  // Create a new function that can be invoked by another caller, and immediately listen to it
-  // This function will be a topic in ubsub
-  void createFunction(const char *name, TopicCallback callback);
-
-  // Call function on another device
-  int callFunction(const char *name, const char *arg);
-  int callFunction(const char *name);
-
-  // processEvents() needs to be called frequently.  It takes care of things such as:
-  // - Re-sending any queued outbound messages
-  // - Checking for, and processing, incoming data
-  // - Occassionally handling pings to keep connection alive (or reconnecting if needed)
-  void processEvents();
-
-  // Gets the last error, or NULL if no error
-  const int getLastError();
 };
 
 #endif
