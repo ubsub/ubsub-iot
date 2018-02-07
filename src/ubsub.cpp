@@ -205,24 +205,25 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
     return UBSUB_MISSING_ARGS;
   }
 
+  const int COMMAND_LEN = 66;
   static uint8_t command[UBSUB_MTU];
-  memset(command, 0, 66);
+  memset(command, 0, COMMAND_LEN);
   *(uint16_t*)command = this->localPort;
   pushstr(command+2, topicId, 32);
   if (topicKey != NULL) {
     pushstr(command+34, topicKey, 32);
   }
 
-  int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-66) : 0;
+  int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-COMMAND_LEN) : 0;
   if (msgLen > 0) {
-    memcpy(command+66, msg, msgLen);
+    memcpy(command+COMMAND_LEN, msg, msgLen);
   }
 
   #ifdef UBSUB_LOG
   log("INFO", "Publishing message to topic %s with %d bytes...", topicId, msgLen);
   #endif
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, command, msgLen + 64);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, command, msgLen + COMMAND_LEN);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
