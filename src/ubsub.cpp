@@ -166,7 +166,9 @@ Ubsub::~Ubsub() {
 }
 
 bool Ubsub::connect(int timeout) {
+  #ifdef UBSUB_LOG
   log("INFO", "Ubsub connecting (local: %d)...", this->localPort);
+  #endif
 
   this->initSocket();
 
