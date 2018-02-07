@@ -13,6 +13,7 @@
   #include <Arduino.h>
   #include <ESP8266WiFi.h>
   #include <WiFiUdp.h>
+  #include <time.h>
 #else
   #include <string.h>
   #include <stdio.h>
@@ -165,6 +166,8 @@ Ubsub::~Ubsub() {
 }
 
 bool Ubsub::connect(int timeout) {
+  log("INFO", "Ubsub connecting (local: %d)...", this->localPort);
+
   this->initSocket();
 
   this->lastPong = 0;
@@ -753,6 +756,10 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
     return -1;
   }
 
+  #ifdef UBSUB_LOG
+  log("DEBUG", "Sending %d bytes to host %s:%d...", bufSize, this->host, this->port);
+  #endif
+
   #if ARDUINO
     if (this->sock.beginPacket(this->host, this->port) != 1)
       return -1;
@@ -766,10 +773,6 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
     this->sock.write(buf, bufSize);
     return this->sock.endPacket();
   #else
-    #ifdef UBSUB_LOG
-    log("DEBUG", "Sending %d bytes to host...", bufSize);
-    #endif
-
     struct hostent *server;
     server = gethostbyname(this->host);
     if (server == NULL) {
@@ -917,7 +920,7 @@ static char* getUniqueDeviceId() {
 // Get time in seconds
 static uint64_t getTime() {
 #if ARDUINO
-  return (uint64_t)(millis() / 1000);
+  return time(NULL);
 #elif PARTICLE
   return Time.now();
 #else
