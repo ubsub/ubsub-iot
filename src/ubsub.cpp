@@ -360,6 +360,34 @@ void Ubsub::processEvents() {
   this->processQueue();
 }
 
+int Ubsub::getQueueSize() {
+  int count = 0;
+  QueuedMessage* msg = this->queue;
+  while(msg != NULL) {
+    count++;
+    msg = msg->next;
+  }
+  return count;
+}
+
+void Ubsub::flush(int timeout) {
+  #ifdef UBSUB_LOG
+  log("DEBUG", "Waiting for flush...");
+  #endif
+
+  uint64_t timeoutTime = getTime() + timeout;
+  while(this->getQueueSize() > 0 && (timeout < 0 || getTime() <= timeoutTime) ) {
+    this->processEvents();
+    #if ARDUINO || PARTICLE
+    delay(10); // Yield to device
+    #endif
+  }
+
+  #ifdef UBSUB_LOG
+  log("DEBUG", "Flushed");
+  #endif
+}
+
 
 
 

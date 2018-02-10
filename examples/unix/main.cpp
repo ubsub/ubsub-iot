@@ -19,6 +19,8 @@ int main() {
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
   client.callFunction("test-autocreate", "hi there direct");
 
+  client.flush();
+
   while(true) {
     client.processEvents();
     usleep(5 * 1000);

@@ -109,6 +109,12 @@ public:
   // - Occassionally handling pings to keep connection alive (or reconnecting if needed)
   void processEvents();
 
+  // Gets the number of queued events
+  int getQueueSize();
+
+  // Wait for the queue to be flushed (blocking)
+  void flush(int timeout = -1);
+
   // Gets the last error, or NULL if no error
   const int getLastError();
 
