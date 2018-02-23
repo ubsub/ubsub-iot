@@ -148,7 +148,7 @@ Receives, pings, and retries any outstanding events.  Must be called frequently,
 
 Gets the last error code that has occurred in the client. `0` is no-error.
 
-**Errors:** (from [ubsub.h](ubsub.h))
+**Errors:** (from [ubsub.h](src/ubsub.h))
 
 ```c
 #define UBSUB_ERR_INVALID_PACKET -1
