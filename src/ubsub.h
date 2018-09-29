@@ -149,7 +149,8 @@ private:
   void initSocket();
   void closeSocket();
   int sendData(const uint8_t* buf, int bufSize);
-  int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen);
+
+  int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen, const uint8_t *optData, int dataLen);
   int sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen);
   int sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen);
 

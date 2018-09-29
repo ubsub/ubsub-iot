@@ -36,6 +36,7 @@ const char* DEFAULT_NTP_SERVER = "pool.ntp.org";
 // Generates outer & inner packet, running it through cryptography
 #define UBSUB_CRYPTHEADER_LEN 25
 #define UBSUB_HEADER_LEN 13
+#define UBSUB_FULL_HEADER_LEN (UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN)
 #define UBSUB_SIGNATURE_LEN 32
 #define DEVICE_ID_MAX_LEN 16
 
@@ -109,7 +110,7 @@ const char* DEFAULT_NTP_SERVER = "pool.ntp.org";
 #endif
 
 //static char* getUniqueDeviceId();
-static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen);
+static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen, const uint8_t *optData, int dataLen);
 static uint64_t getTime();
 static uint32_t getNonce32();
 static uint64_t getNonce64();
@@ -248,7 +249,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   }
 
   const int COMMAND_LEN = 66;
-  static uint8_t command[UBSUB_MTU];
+  uint8_t command[COMMAND_LEN];
   memset(command, 0, COMMAND_LEN);
   *(uint16_t*)command = this->localPort;
   pushstr(command+2, topicId, 32);
@@ -257,15 +258,12 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   }
 
   int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-COMMAND_LEN) : 0;
-  if (msgLen > 0) {
-    memcpy(command+COMMAND_LEN, msg, msgLen);
-  }
 
   #ifdef UBSUB_LOG
   log("INFO", "Publishing message to topic %s with %d bytes...", topicId, msgLen);
   #endif
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, command, msgLen + COMMAND_LEN);
+  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, this->autoRetry, getNonce64(), command, COMMAND_LEN, (uint8_t*)msg, msgLen);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
@@ -301,7 +299,8 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
     this->autoRetry,
     sub->requestNonce,
     command,
-    COMMAND_LEN);
+    COMMAND_LEN,
+    NULL, 0);
 }
 
 void Ubsub::createFunction(const char *name, TopicCallback callback) {
@@ -752,15 +751,16 @@ void Ubsub::renewSubscriptions() {
         this->autoRetry,
         sub->requestNonce,
         command,
-        COMMAND_LEN);
+        COMMAND_LEN,
+        NULL, 0);
     }
     sub = sub->next;
   }
 }
 
-int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen) {
+int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen, const uint8_t* optData, int dataLen) {
   static uint8_t buf[UBSUB_MTU];
-  int plen = createPacket(buf, UBSUB_MTU, this->deviceId, this->deviceKey, cmd, flag, nonce, command, commandLen);
+  int plen = createPacket(buf, UBSUB_MTU, this->deviceId, this->deviceKey, cmd, flag, nonce, command, commandLen, optData, dataLen);
   if (plen < 0) {
     this->setError(UBSUB_ERR_SEND);
     return -1;
@@ -775,7 +775,7 @@ int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &n
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint8_t *command, int commandLen) {
   uint64_t nonce = getNonce64();
-  return this->sendCommand(cmd, flag, retry, nonce, command, commandLen);
+  return this->sendCommand(cmd, flag, retry, nonce, command, commandLen, NULL, 0);
 }
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, const uint8_t *command, int commandLen) {
@@ -947,11 +947,19 @@ void Ubsub::syncTime(int timeout) {
   this->lastTimeSync = getTime();
 }
 
-static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t *body, int bodyLen) {
-  if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN) {
+static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const char *key, uint16_t cmd, uint8_t flag, const uint64_t &nonce,
+    const uint8_t *body, int bodyLen, const uint8_t *optData, int dataLen) {
+
+  if (bufSize < UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + dataLen + UBSUB_SIGNATURE_LEN) {
     // Buffer too short
     return -1;
   }
+  #if DEBUG
+  if (bodyLen < 0)
+    return -1;
+  if (dataLen < 0)
+    return -1;
+  #endif
 
   uint64_t ts = getTime();
 
@@ -969,29 +977,33 @@ static int createPacket(uint8_t* buf, int bufSize, const char *deviceId, const c
   memcpy(buf+9, deviceId, deviceIdLen);
 
   // Set header
+  int fullDataLength = bodyLen + dataLen;
   write_le<uint64_t>(buf+25, ts);
   write_le<uint16_t>(buf+33, cmd);
-  write_le<uint16_t>(buf+35, (uint16_t)bodyLen);
+  write_le<uint16_t>(buf+35, (uint16_t)fullDataLength);
   *(uint8_t*)(buf+37) = flag;
 
   // Copy body to buffer
   if (body != NULL && bodyLen > 0) {
-    memcpy(buf+38, body, bodyLen);
+    memcpy(buf+UBSUB_FULL_HEADER_LEN, body, bodyLen);
+  }
+  if (optData != NULL && dataLen > 0) {
+    memcpy(buf+UBSUB_FULL_HEADER_LEN+bodyLen, optData, dataLen);
   }
 
   // Run the body though the cipher
   Sha256.init();
   Sha256.write((uint8_t*)key, strlen(key));
   uint8_t* expandedKey = Sha256.result();
-  s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, UBSUB_HEADER_LEN + bodyLen);
+  s20_crypt(expandedKey, S20_KEYLEN_256, (uint8_t*)&nonce, 0, buf+25, UBSUB_HEADER_LEN + fullDataLength);
 
   // Sign the entire thing
   Sha256.initHmac((uint8_t*)key, strlen(key));
-  Sha256.write(buf, UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen);
+  Sha256.write(buf, UBSUB_FULL_HEADER_LEN + fullDataLength);
   uint8_t* digest = Sha256.resultHmac();
-  memcpy(buf + UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen, digest, 32);
+  memcpy(buf + UBSUB_FULL_HEADER_LEN + fullDataLength, digest, 32);
 
-  return UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + bodyLen + UBSUB_SIGNATURE_LEN;
+  return UBSUB_CRYPTHEADER_LEN + UBSUB_HEADER_LEN + fullDataLength + UBSUB_SIGNATURE_LEN;
 }
 
 
