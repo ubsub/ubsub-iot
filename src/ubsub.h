@@ -81,6 +81,11 @@ public:
   // But if you'd like to disable it for some reason, you can call this
   void enableAutoSyncTime(bool enabled);
 
+  // Enable or disable auto-retrying sending messages
+  // If-off, will only ever try to send message once
+  // This will not dequeue existing retry jobs, so can turn it on for one then back off
+  void enableAutoRetry(bool enabled);
+
   // Attempts to establish a connection with UbSub.io
   // If succeeds returns true.  If fails after timeout, returns false
   // REQUIRED to call, at least during setup, to listen on socket

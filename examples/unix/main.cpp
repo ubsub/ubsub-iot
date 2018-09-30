@@ -13,6 +13,7 @@ int main() {
   if (!client.connect(2)) {
     std::cout << "Failed to connect" << std::endl;
   }
+  // client.enableAutoRetry(false);
 
   client.listenToTopic("testy", myMethod);
 

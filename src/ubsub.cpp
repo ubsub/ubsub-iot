@@ -176,6 +176,10 @@ void Ubsub::enableAutoSyncTime(bool enabled) {
   this->lastTimeSync = 0;
 }
 
+void Ubsub::enableAutoRetry(bool enabled) {
+  this->autoRetry = enabled;
+}
+
 bool Ubsub::connect(int timeout) {
   #ifdef UBSUB_LOG
   log("INFO", "Ubsub connecting (local: %d)...", this->localPort);
@@ -263,7 +267,11 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   log("INFO", "Publishing message to topic %s with %d bytes...", topicId, msgLen);
   #endif
 
-  return this->sendCommand(CMD_MSG, MSG_FLAG_ACK | MSG_FLAG_CREATE, this->autoRetry, getNonce64(), command, COMMAND_LEN, (uint8_t*)msg, msgLen);
+  uint8_t flag = MSG_FLAG_CREATE;
+  if (this->autoRetry)
+    flag |= MSG_FLAG_ACK;
+
+  return this->sendCommand(CMD_MSG, flag, this->autoRetry, getNonce64(), command, COMMAND_LEN, (uint8_t*)msg, msgLen);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
@@ -641,12 +649,16 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
       *prevNext = msg->next;
       free(msg->buf);
       free(msg);
-      break;
+      return;
     }
 
     prevNext = &msg->next;
     msg = msg->next;
   }
+
+  #ifdef UBSUB_LOG_DEBUG
+  log("DEBUG", "Unable to remove 0x%s from queue, not found", tohexstr(nonce));
+  #endif
 }
 
 void Ubsub::processQueue() {
