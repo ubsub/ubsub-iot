@@ -26,6 +26,7 @@ typedef void (*TopicCallback)(const char* arg);
 #define UBSUB_SUBSCRIPTION_TTL 60*5 // 5 minutes
 #define UBSUB_NONCE_RR_COUNT 32 // Number of nonces to track
 #define UBSUB_TIME_SYNC_FREQ 12*60*60
+#define UBSUB_WATCH_CHECK_FREQ 60
 
 // If defined, will log to stderr on unix, and Serial on embedded
 // Not enabled by default but feel free to build with -DUBSUB_LOG or uncomment below
@@ -69,6 +70,16 @@ typedef struct SubscribedFunc {
   SubscribedFunc* next;
 } SubscribedFunc;
 
+typedef struct VariableWatch {
+  const uint8_t* ptr;
+  int len;
+  uint8_t format;
+  char name[33];
+  uint32_t hash;
+  uint64_t lastCheck;
+  VariableWatch* next;
+} VariableWatch;
+
 class Ubsub {
 public:
   Ubsub(const char *deviceId, const char *deviceKey, const char *ubsubHost, int ubsubPort);
@@ -108,10 +119,16 @@ public:
   int callFunction(const char *name, const char *arg);
   int callFunction(const char *name);
 
+  // Watch a variable and send updates to the server
+  void watchVariable(const char *name, const char* s, int maxLen);
+  void watchVariable(const char *name, const int* val);
+  void watchVariable(const char *name, const float* val);
+
   // processEvents() needs to be called frequently.  It takes care of things such as:
   // - Re-sending any queued outbound messages
   // - Checking for, and processing, incoming data
   // - Occassionally handling pings to keep connection alive (or reconnecting if needed)
+  // - Watching variables for changes
   void processEvents();
 
   // Gets the number of queued events
@@ -143,6 +160,7 @@ private: // State
 
   uint64_t lastTimeSync;
 
+  VariableWatch* watch;
   QueuedMessage* queue;
   SubscribedFunc* subs;
   uint64_t rrnonce[UBSUB_NONCE_RR_COUNT];
@@ -172,6 +190,9 @@ private:
   QueuedMessage* queueMessage(const uint8_t* buf, int bufLen, const uint64_t &nonce);
   void removeQueue(const uint64_t &nonce);
   void processQueue();
+
+  void watchVariable(const char *name, const void* ptr, int len, uint8_t format);
+  void checkWatchedVariables();
 
   void writeNonce(const uint64_t &nonce);
   bool hasNonce(const uint64_t &nonce);

@@ -68,6 +68,10 @@ const char* DEFAULT_NTP_SERVER = "pool.ntp.org";
 #define CMD_PING        0x10
 #define CMD_PONG        0x11
 
+#define FORMAT_STRING   0x1
+#define FORMAT_INT      0x2
+#define FORMAT_FLOAT    0x3
+
 #ifdef UBSUB_LOG
   #if !(ARDUINO || PARTICLE)
     #include <iostream>
@@ -145,6 +149,7 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
   this->queue = NULL;
   this->autoRetry = true;
   this->subs = NULL;
+  this->watch = NULL;
 
   this->autoSyncTime = true;
   this->lastTimeSync = 0;
@@ -323,6 +328,34 @@ int Ubsub::callFunction(const char *name) {
   return this->callFunction(name, NULL);
 }
 
+void Ubsub::watchVariable(const char *name, const void* ptr, int len, uint8_t format) {
+  VariableWatch* watch = (VariableWatch*)malloc(sizeof(VariableWatch));
+  strncpy(watch->name, name, sizeof(watch->name)-1);
+  watch->format = format;
+  watch->ptr = (uint8_t*)ptr;
+  watch->len = len;
+  watch->lastCheck = 0;
+
+  watch->next = this->watch;
+  this->watch = watch;
+
+  #ifdef UBSUB_LOG
+  log("INFO", "Watching variable %s at %p (size: %d)...", name, ptr, len);
+  #endif
+}
+
+void Ubsub::watchVariable(const char *name, const char *s, int maxLen) {
+  this->watchVariable(name, s, maxLen, FORMAT_STRING);
+}
+
+void Ubsub::watchVariable(const char *name, const int *val) {
+  this->watchVariable(name, val, sizeof(int), FORMAT_INT);
+}
+
+void Ubsub::watchVariable(const char *name, const float *val) {
+  this->watchVariable(name, val, sizeof(float), FORMAT_FLOAT);
+}
+
 const int Ubsub::getLastError() {
   const int err = this->lastError[0];
   for (int i=0; i<UBSUB_ERROR_BUFFER_LEN-1; ++i) {
@@ -365,6 +398,9 @@ void Ubsub::processEvents() {
 
   // Process queued events
   this->processQueue();
+
+  // Watch variables for changes
+  this->checkWatchedVariables();
 }
 
 int Ubsub::getQueueSize() {
@@ -769,6 +805,54 @@ void Ubsub::renewSubscriptions() {
     sub = sub->next;
   }
 }
+
+static uint32_t hash32(const uint8_t* data, int len) {
+  uint32_t hash = 0;
+  const uint8_t* p = data + len;
+  while( p-- != data )
+    hash ^= (hash << 5) + (hash >> 2) + *p;
+  return hash;
+}
+
+void Ubsub::checkWatchedVariables() {
+  uint64_t now = getTime();
+
+  VariableWatch *watch = this->watch;
+  while(watch != NULL) {
+    if (now >= watch->lastCheck + UBSUB_WATCH_CHECK_FREQ) {
+      watch->lastCheck = now;
+
+      // Compute hash
+      uint32_t hash = hash32(watch->ptr, watch->len);
+      if (hash != watch->hash) {
+        // There was an update!
+        #ifdef UBSUB_LOG
+        log("INFO", "Detected change in variable %s, updating...", watch->name);
+        #endif
+        watch->hash = hash;
+
+        if (watch->format == FORMAT_STRING) {
+          this->callFunction(watch->name, (char*)watch->ptr);
+        } else if (watch->format == FORMAT_INT) {
+          char buf[20];
+          sprintf(buf, "%d", *(int*)watch->ptr);
+          this->callFunction(watch->name, buf);
+        } else if (watch->format == FORMAT_FLOAT) {
+          char buf[20];
+          sprintf(buf, "%f", *(float*)watch->ptr);
+          this->callFunction(watch->name, buf);
+        } else {
+          #ifdef UBSUB_LOG
+          log("WARN", "Unable to send watched variable, unknown variable %d", watch->format);
+          #endif
+        }
+      }
+    }
+
+    watch = watch->next;
+  }
+}
+
 
 int Ubsub::sendCommand(uint16_t cmd, uint8_t flag, bool retry, const uint64_t &nonce, const uint8_t *command, int commandLen, const uint8_t* optData, int dataLen) {
   static uint8_t buf[UBSUB_MTU];
