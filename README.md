@@ -140,6 +140,13 @@ Call a topic, by name, with an optional argument.
 If the arg is JSON, it will be interpreted as such, otherwise
 it will be wrapped like so: `{"payload": <arg>}`
 
+## Ubsub::watchVariable(name, const char* val, int len);
+## Ubsub::watchVariable(name, &val)
+
+Watches a variable for changes (char array, int, or float).
+
+If variable change is detected, automatically publishes event to `name`.
+
 ## processEvents()
 
 Receives, pings, and retries any outstanding events.  Must be called frequently, such as in your `void loop(){}` function.
