@@ -8,6 +8,7 @@
     #include <stdio.h>
     #include <stdarg.h>
   #else
+    #include <Arduino.h>
     #warning Logs are enabled. This will result in more string memory being consumed
   #endif
 
