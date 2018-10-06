@@ -13,4 +13,4 @@ matrix:
       install:
         - pip install -U platformio
       script:
-        - platformio ci --lib="." --board=nodemcuv2 --board=huzzah --board=esp01_1m --board=thing
+        - platformio ci --lib="." --board=nodemcuv2 --board=huzzah --board=esp01_1m --board=thing --board=d1_mini_lite
