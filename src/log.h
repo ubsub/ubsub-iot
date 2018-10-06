@@ -16,7 +16,7 @@
     static char logbuf[256];
     va_list argptr;
     va_start(argptr, msg);
-    vsprintf(logbuf, msg, argptr);
+    vsnprintf(logbuf, sizeof(logbuf), msg, argptr);
     va_end(argptr);
     #if ARDUINO || PARTICLE
       Serial.printf("[%s] (%s:%d) %s", level, filename, line, logbuf);
