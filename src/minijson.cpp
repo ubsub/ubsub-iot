@@ -65,12 +65,16 @@ int MiniJsonBuilder::items() {
 	return this->itemCount;
 }
 
+int MiniJsonBuilder::length() {
+	return this->cur;
+}
+
 const char* MiniJsonBuilder::c_str() {
 	return this->buf;
 }
 
 void MiniJsonBuilder::append(char c) {
-	if (this->cur >= this->len)
+	if (this->cur >= this->len-1)
 		return;
 	this->buf[this->cur++] = c;
 }

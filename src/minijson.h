@@ -22,6 +22,7 @@ public:
 
 	const char* c_str();
 	int items();
+	int length();
 
 protected:
 	void append(char c);
