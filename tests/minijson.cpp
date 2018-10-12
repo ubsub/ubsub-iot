@@ -65,3 +65,26 @@ TEST_CASE("Json overflow protection", "[MJB]") {
   CAPTURE(j.c_str());
   CHECK(strcmp(j.c_str(), "{\"hi\":\"") == 0);
 }
+
+TEST_CASE("Test clearing", "[MJB]") {
+  MiniJsonBuilder j(16);
+  j.open().write("hi", "there").close();
+  CHECK(j.items() == 1);
+  CHECK(j.length() > 0);
+
+  j.clear();
+  CHECK(j.items() == 0);
+  CHECK(j.length() == 0);
+  CHECK(strcmp(j.c_str(), "") == 0);
+}
+
+TEST_CASE("Test foreign buf", "[MJB]") {
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  
+  {
+    MiniJsonBuilder j(buf, sizeof(buf));
+    j.open().write("hi", "there").close();
+  }
+  CHECK(strcmp(buf, "{\"hi\":\"there\"}") == 0);
+}

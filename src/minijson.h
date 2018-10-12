@@ -6,11 +6,14 @@ class MiniJsonBuilder {
 private:
 	char* buf;
 	int len;
+	bool foreignBuf;
+	
 	int cur;
 	int itemCount;
 
 public:
 	MiniJsonBuilder(int buflen);
+	MiniJsonBuilder(char* buf, int len);
 	~MiniJsonBuilder();
 
 	MiniJsonBuilder& open();
@@ -19,6 +22,8 @@ public:
 	MiniJsonBuilder& write(const char* name, float val);
 	MiniJsonBuilder& write(const char* name, bool val);
 	MiniJsonBuilder& close();
+
+	void clear();
 
 	const char* c_str();
 	int items();

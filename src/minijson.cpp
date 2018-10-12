@@ -5,14 +5,22 @@
 
 MiniJsonBuilder::MiniJsonBuilder(int buflen) {
 	this->len = buflen;
+	this->buf = (char*)malloc(buflen);
+	this->foreignBuf = false;
+	this->clear();
+}
+
+MiniJsonBuilder::MiniJsonBuilder(char* buf, int len) {
+	this->len = len;
+	this->buf = buf;
+	this->foreignBuf = true;
 	this->cur = 0;
 	this->itemCount = 0;
-	this->buf = (char*)malloc(buflen);
-	memset(this->buf, 0, buflen);
 }
 
 MiniJsonBuilder::~MiniJsonBuilder() {
-	free(this->buf);
+	if (!this->foreignBuf)
+		free(this->buf);
 }
 
 MiniJsonBuilder& MiniJsonBuilder::open() {
@@ -59,6 +67,12 @@ MiniJsonBuilder& MiniJsonBuilder::write(const char* name, bool val) {
 MiniJsonBuilder& MiniJsonBuilder::close() {
 	this->append("}");
 	return *this;
+}
+
+void MiniJsonBuilder::clear() {
+	this->cur = 0;
+	this->itemCount = 0;
+	memset(this->buf, 0, this->len);
 }
 
 int MiniJsonBuilder::items() {
