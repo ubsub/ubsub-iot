@@ -23,7 +23,9 @@ int main() {
   client.flush();
 
   int test = 50000;
-  client.watchVariable("test-autocreate", &test); // Any time this value changes, an event will be emitted
+  client.setWatchTopic("iot-watches");
+  client.watchVariable("other", &test);
+  client.watchVariable("var", &test); // Any time this value changes, an event will be emitted
 
   while(true) {
     test++;

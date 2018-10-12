@@ -72,7 +72,7 @@ MiniJsonBuilder& MiniJsonBuilder::close() {
 void MiniJsonBuilder::clear() {
 	this->cur = 0;
 	this->itemCount = 0;
-	memset(this->buf, 0, this->len);
+	this->buf[0] = '\0';
 }
 
 int MiniJsonBuilder::items() {
@@ -88,9 +88,11 @@ const char* MiniJsonBuilder::c_str() {
 }
 
 void MiniJsonBuilder::append(char c) {
+	// This is the ONLY place that write to buf!
 	if (this->cur >= this->len-1)
 		return;
 	this->buf[this->cur++] = c;
+	this->buf[this->cur+1] = '\0';
 }
 
 void MiniJsonBuilder::append(const char* s, bool escape) {

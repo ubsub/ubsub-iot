@@ -115,6 +115,7 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
 
   this->autoSyncTime = true;
   this->lastTimeSync = 0;
+  this->watchTopic[0] = '\0';
 
   LOG_INFO("DID: %s", this->deviceId);
 }
@@ -276,6 +277,10 @@ int Ubsub::callFunction(const char *name, const char *arg) {
 
 int Ubsub::callFunction(const char *name) {
   return this->callFunction(name, NULL);
+}
+
+void Ubsub::setWatchTopic(const char *name) {
+  strncpy(this->watchTopic, name, sizeof(this->watchTopic)-1);
 }
 
 void Ubsub::watchVariable(const char *name, const void* ptr, int len, uint8_t format) {
@@ -724,7 +729,9 @@ static uint32_t hash32(const uint8_t* data, int len) {
 
 void Ubsub::checkWatchedVariables() {
   uint64_t now = getTime();
-  MiniJsonBuilder json(256);
+  
+  char buf[128]; // stack buffer
+  MiniJsonBuilder json(buf, sizeof(buf));
   json.open();
 
   VariableWatch *watch = this->watch;
@@ -740,18 +747,11 @@ void Ubsub::checkWatchedVariables() {
         watch->hash = hash;
 
         if (watch->format == FORMAT_STRING) {
-          //this->callFunction(watch->name, (char*)watch->ptr);
           json.write(watch->name, (char*)watch->ptr);
         } else if (watch->format == FORMAT_INT) {
           json.write(watch->name, *(int*)watch->ptr);
-          //char buf[20];
-          //sprintf(buf, "%d", *(int*)watch->ptr);
-          //this->callFunction(watch->name, buf);
         } else if (watch->format == FORMAT_FLOAT) {
           json.write(watch->name, *(float*)watch->ptr);
-          //char buf[20];
-          //sprintf(buf, "%f", *(float*)watch->ptr);
-          //this->callFunction(watch->name, buf);
         } else {
           LOG_WARN("Unable to send watched variable, unknown variable %d", watch->format);
         }
@@ -763,7 +763,10 @@ void Ubsub::checkWatchedVariables() {
 
   if (json.items() > 0) {
     json.close();
-    this->callFunction("watches", json.c_str());
+    if (strlen(this->watchTopic) > 0)
+      this->callFunction(this->watchTopic, json.c_str());
+    else
+      this->callFunction("watches", json.c_str());
   }
 }
 
