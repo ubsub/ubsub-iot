@@ -3,6 +3,7 @@
 #include "salsa20.h"
 #include "binio.h"
 #include "log.h"
+#include "minijson.h"
 
 #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error Little endian ordering required for binary serialization
@@ -114,6 +115,7 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
 
   this->autoSyncTime = true;
   this->lastTimeSync = 0;
+  this->watchTopic[0] = '\0';
 
   LOG_INFO("DID: %s", this->deviceId);
 }
@@ -275,6 +277,10 @@ int Ubsub::callFunction(const char *name, const char *arg) {
 
 int Ubsub::callFunction(const char *name) {
   return this->callFunction(name, NULL);
+}
+
+void Ubsub::setWatchTopic(const char *topicNameOrId) {
+  strncpy(this->watchTopic, topicNameOrId, sizeof(this->watchTopic)-1);
 }
 
 void Ubsub::watchVariable(const char *name, const void* ptr, int len, uint8_t format) {
@@ -723,6 +729,10 @@ static uint32_t hash32(const uint8_t* data, int len) {
 
 void Ubsub::checkWatchedVariables() {
   uint64_t now = getTime();
+  
+  char buf[128]; // stack buffer
+  MiniJsonBuilder json(buf, sizeof(buf));
+  json.open();
 
   VariableWatch *watch = this->watch;
   while(watch != NULL) {
@@ -737,15 +747,11 @@ void Ubsub::checkWatchedVariables() {
         watch->hash = hash;
 
         if (watch->format == FORMAT_STRING) {
-          this->callFunction(watch->name, (char*)watch->ptr);
+          json.write(watch->name, (char*)watch->ptr);
         } else if (watch->format == FORMAT_INT) {
-          char buf[20];
-          sprintf(buf, "%d", *(int*)watch->ptr);
-          this->callFunction(watch->name, buf);
+          json.write(watch->name, *(int*)watch->ptr);
         } else if (watch->format == FORMAT_FLOAT) {
-          char buf[20];
-          sprintf(buf, "%f", *(float*)watch->ptr);
-          this->callFunction(watch->name, buf);
+          json.write(watch->name, *(float*)watch->ptr);
         } else {
           LOG_WARN("Unable to send watched variable, unknown variable %d", watch->format);
         }
@@ -753,6 +759,14 @@ void Ubsub::checkWatchedVariables() {
     }
 
     watch = watch->next;
+  }
+
+  if (json.items() > 0) {
+    json.close();
+    if (strlen(this->watchTopic) > 0)
+      this->callFunction(this->watchTopic, json.c_str());
+    else
+      this->callFunction("watches", json.c_str());
   }
 }
 

@@ -120,6 +120,7 @@ public:
   int callFunction(const char *name);
 
   // Watch a variable and send updates to the server
+  void setWatchTopic(const char *topicNameOrId);
   void watchVariable(const char *name, const char* s, int maxLen);
   void watchVariable(const char *name, const int* val);
   void watchVariable(const char *name, const float* val);
@@ -159,6 +160,8 @@ private: // State
   uint64_t lastPing;
 
   uint64_t lastTimeSync;
+
+  char watchTopic[33];
 
   VariableWatch* watch;
   QueuedMessage* queue;
