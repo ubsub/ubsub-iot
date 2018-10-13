@@ -279,7 +279,7 @@ int Ubsub::callFunction(const char *name) {
   return this->callFunction(name, NULL);
 }
 
-void Ubsub::setWatchTopic(const char *name) {
+void Ubsub::setWatchTopic(const char *topicNameOrId) {
   strncpy(this->watchTopic, name, sizeof(this->watchTopic)-1);
 }
 

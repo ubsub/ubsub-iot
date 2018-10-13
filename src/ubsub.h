@@ -120,7 +120,7 @@ public:
   int callFunction(const char *name);
 
   // Watch a variable and send updates to the server
-  void setWatchTopic(const char *name);
+  void setWatchTopic(const char *topicNameOrId);
   void watchVariable(const char *name, const char* s, int maxLen);
   void watchVariable(const char *name, const int* val);
   void watchVariable(const char *name, const float* val);
