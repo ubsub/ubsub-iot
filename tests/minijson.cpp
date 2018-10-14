@@ -88,3 +88,19 @@ TEST_CASE("Test foreign buf", "[MJB]") {
   }
   CHECK(strcmp(buf, "{\"hi\":\"there\"}") == 0);
 }
+
+TEST_CASE("Test NaN", "[MJB]") {
+  MiniJsonBuilder j(16);
+  j.open().write("hi", NAN).close();
+  CAPTURE(j.c_str());
+  CHECK(j.items() == 1);
+  CHECK(strcmp(j.c_str(), "{\"hi\":\"NaN\"}") == 0);
+}
+
+TEST_CASE("Test Inf", "[MJB]") {
+  MiniJsonBuilder j(16);
+  j.open().write("hi", INFINITY).close();
+  CAPTURE(j.c_str());
+  CHECK(j.items() == 1);
+  CHECK(strcmp(j.c_str(), "{\"hi\":\"Inf\"}") == 0);
+}

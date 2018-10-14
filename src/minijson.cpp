@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "minijson.h"
 
 MiniJsonBuilder::MiniJsonBuilder(int buflen) {
@@ -49,9 +50,15 @@ MiniJsonBuilder& MiniJsonBuilder::write(const char* name, int val) {
 }
 
 MiniJsonBuilder& MiniJsonBuilder::write(const char* name, float val) {
-	char num[20];
-	snprintf(num, sizeof(num), "%f", val);
-	this->write(name, num, true);
+	if (isnan(val)) {
+		this->write(name, "NaN");
+	} else if (isinf(val)) {
+		this->write(name, "Inf");
+	} else {
+		char num[20];
+		snprintf(num, sizeof(num), "%f", val);
+		this->write(name, num, true);
+	}
 	return *this;
 }
 
