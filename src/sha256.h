@@ -1,5 +1,5 @@
-#ifndef Sha256_h
-#define Sha256_h
+#ifndef ubsub_Sha256_h
+#define ubsub_Sha256_h
 
 #include <inttypes.h>
 

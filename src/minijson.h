@@ -1,6 +1,6 @@
 
-#ifndef minijson_h
-#define minijson_h
+#ifndef ubsub_minijson_h
+#define ubsub_minijson_h
 
 class MiniJsonBuilder {
 private:

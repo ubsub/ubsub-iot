@@ -1,6 +1,6 @@
 
-#ifndef log_h
-#define log_h
+#ifndef ubsub_log_h
+#define ubsub_log_h
 
 #ifdef UBSUB_LOG
   #if !(ARDUINO || PARTICLE)

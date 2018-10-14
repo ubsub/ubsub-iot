@@ -1,7 +1,7 @@
 #include <cstring>
 
-#ifndef binio_h
-#define binio_h
+#ifndef ubsub_binio_h
+#define ubsub_binio_h
 
 /**
 Particle/arduino can't use pointer-arithmatic to copy memory of certain types
