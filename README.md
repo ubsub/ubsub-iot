@@ -182,6 +182,11 @@ Gets the last error code that has occurred in the client. `0` is no-error.
  * Particle
  * ESP8266 Boards
 
+# Logging
+
+To enable logging, simply define `UBSUB_LOG` during build-time.  For debug logging,
+define `UBSUB_LOG_DEBUG`.
+
 # Third Party
 
 ## CryptoSuite

@@ -117,7 +117,7 @@ void Ubsub::init(const char *deviceId, const char *deviceKey, const char *ubsubH
   this->lastTimeSync = 0;
   this->watchTopic[0] = '\0';
 
-  LOG_INFO("DID: %s", this->deviceId);
+  US_LOG_INFO("DID: %s", this->deviceId);
 }
 
 Ubsub::~Ubsub() {
@@ -147,7 +147,7 @@ void Ubsub::enableAutoRetry(bool enabled) {
 }
 
 bool Ubsub::connect(int timeout) {
-  LOG_INFO("Ubsub connecting (local: %d)...", this->localPort);
+  US_LOG_INFO("Ubsub connecting (local: %d)...", this->localPort);
 
   uint64_t timeoutTime = getTime() + timeout;
 
@@ -180,7 +180,7 @@ bool Ubsub::connect(int timeout) {
 
   this->lastPong = 0;
   while(true) {
-    LOG_DEBUG("Attempting connect...");
+    US_LOG_DEBUG("Attempting connect...");
     this->ping();
 
     // Wait for pong
@@ -202,7 +202,7 @@ bool Ubsub::connect(int timeout) {
     }
   }
 
-  LOG_INFO("Connection established");
+  US_LOG_INFO("Connection established");
   return true;
 }
 
@@ -223,7 +223,7 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
 
   int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-COMMAND_LEN) : 0;
 
-  LOG_INFO("Publishing message to topic %s with %d bytes...", topicId, msgLen);
+  US_LOG_INFO("Publishing message to topic %s with %d bytes...", topicId, msgLen);
 
   uint8_t flag = MSG_FLAG_CREATE;
   if (this->autoRetry)
@@ -255,7 +255,7 @@ void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {
   sub->renewTime = getTime() + 5; // Retry frequenctly. Ack will push this out
   this->subs = sub;
 
-  LOG_INFO("Listening to '%s' with funcId 0x%s...", topicNameOrId, tohexstr(funcId));
+  US_LOG_INFO("Listening to '%s' with funcId 0x%s...", topicNameOrId, tohexstr(funcId));
 
   this->sendCommand(
     CMD_SUB,
@@ -294,7 +294,7 @@ void Ubsub::watchVariable(const char *name, const void* ptr, int len, uint8_t fo
   watch->next = this->watch;
   this->watch = watch;
 
-  LOG_INFO("Watching variable %s at %p (size: %d)...", name, ptr, len);
+  US_LOG_INFO("Watching variable %s at %p (size: %d)...", name, ptr, len);
 }
 
 void Ubsub::watchVariable(const char *name, const char *s, int maxLen) {
@@ -334,7 +334,7 @@ void Ubsub::processEvents() {
     }
 
     if (this->lastPong > 0 && now - this->lastPong > UBSUB_CONNECTION_TIMEOUT) {
-      LOG_WARN("Haven't received pong.. lost connection?");
+      US_LOG_WARN("Haven't received pong.. lost connection?");
       // Attempt reconnection
       this->invalidateSubscriptions();
       this->connect();
@@ -365,7 +365,7 @@ int Ubsub::getQueueSize() {
 }
 
 void Ubsub::flush(int timeout) {
-  LOG_DEBUG("Waiting for flush...");
+  US_LOG_DEBUG("Waiting for flush...");
 
   uint64_t timeoutTime = getTime() + timeout;
   while(this->getQueueSize() > 0 && (timeout < 0 || getTime() <= timeoutTime) ) {
@@ -375,7 +375,7 @@ void Ubsub::flush(int timeout) {
     #endif
   }
 
-  LOG_DEBUG("Flushed");
+  US_LOG_DEBUG("Flushed");
 }
 
 
@@ -390,11 +390,11 @@ void Ubsub::setError(const int err) {
     this->lastError[i] = this->lastError[i-1];
   }
   this->lastError[0] = err;
-  LOG_ERROR("Error code: %d", err);
+  US_LOG_ERROR("Error code: %d", err);
 }
 
 void Ubsub::processPacket(uint8_t *buf, int len) {
-  LOG_DEBUG("Got %d bytes of data", len);
+  US_LOG_DEBUG("Got %d bytes of data", len);
   if (len < UBSUB_HEADER_LEN + UBSUB_CRYPTHEADER_LEN + UBSUB_SIGNATURE_LEN) {
     this->setError(UBSUB_ERR_INVALID_PACKET);
     return;
@@ -459,7 +459,7 @@ void Ubsub::processPacket(uint8_t *buf, int len) {
 }
 
 void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, const uint8_t* body, int bodyLen) {
-  LOG_DEBUG("Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
+  US_LOG_DEBUG("Received command %d with %d byte command. flag: %d", cmd, bodyLen, flag);
 
   uint64_t now = getTime();
 
@@ -470,10 +470,10 @@ void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, co
         this->setError(UBSUB_ERR_BAD_REQUEST);
         return;
       }
-      #ifdef UBSUB_LOG_DEBUG
+      #ifdef UBSUB_US_LOG_DEBUG
       uint64_t pingTime = read_le<uint64_t>(body);
       int32_t roundTrip = (int32_t)((int64_t)now - (int64_t)pingTime);
-      LOG_DEBUG("Got pong. Round trip secs: %d", roundTrip);
+      US_LOG_DEBUG("Got pong. Round trip secs: %d", roundTrip);
       #endif
       if (now > this->lastPong) {
         this->lastPong = now;
@@ -497,12 +497,12 @@ void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, co
           pullstr(sub->subscriptionKey, body+48, 32);
           sub->renewTime = read_le<uint64_t>(body+80);
 
-          LOG_INFO("Received subscription ack for func 0x%s topic %s: %s key %s", tohexstr(sub->funcId), sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
+          US_LOG_INFO("Received subscription ack for func 0x%s topic %s: %s key %s", tohexstr(sub->funcId), sub->topicNameOrId, sub->subscriptionId, sub->subscriptionKey);
         } else {
-          LOG_WARN("Received sub ack for unknown subscription 0x%s", tohexstr(ackNonce));
+          US_LOG_WARN("Received sub ack for unknown subscription 0x%s", tohexstr(ackNonce));
         }
       } else {
-        LOG_WARN("Topic does not exist on server and did not create for nonce 0x%s", tohexstr(ackNonce));
+        US_LOG_WARN("Topic does not exist on server and did not create for nonce 0x%s", tohexstr(ackNonce));
       }
 
       this->removeQueue(ackNonce);
@@ -520,7 +520,7 @@ void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, co
       pullstr(subscriptionKey, body+8, 32);
       pullstr(event, body+40, bodyLen - 40);
 
-      LOG_INFO("Received event from func 0x%s with key %s: %s", tohexstr(funcId), subscriptionKey, event);
+      US_LOG_INFO("Received event from func 0x%s with key %s: %s", tohexstr(funcId), subscriptionKey, event);
 
       // Ack data, if requested. Defer sending until we know flag
       uint8_t msgAck[8];
@@ -539,11 +539,11 @@ void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, co
       } else if (sub != NULL) {
         if (flag & SUB_MSG_FLAG_ACK)
           this->sendCommand(CMD_SUB_MSG_ACK, SUB_MSG_ACK_FLAG_REJECTED, false, msgAck, sizeof(msgAck));
-        LOG_WARN("Received subscription message, but keys don't match: %s != %s", sub->subscriptionKey, subscriptionKey);
+        US_LOG_WARN("Received subscription message, but keys don't match: %s != %s", sub->subscriptionKey, subscriptionKey);
       } else {
         if (flag & SUB_MSG_FLAG_ACK)
           this->sendCommand(CMD_SUB_MSG_ACK, SUB_MSG_ACK_FLAG_REJECTED, false, msgAck, sizeof(msgAck));
-        LOG_WARN("Received subscription message for unknown func 0x%s", tohexstr(funcId));
+        US_LOG_WARN("Received subscription message for unknown func 0x%s", tohexstr(funcId));
       }
 
       break;
@@ -555,15 +555,15 @@ void Ubsub::processCommand(uint16_t cmd, uint8_t flag, const uint64_t &nonce, co
         return;
       }
       uint64_t msgNonce = read_le<uint64_t>(body);
-      LOG_INFO("Got message ack for 0x%s", tohexstr(msgNonce));
+      US_LOG_INFO("Got message ack for 0x%s", tohexstr(msgNonce));
       if (flag & MSG_ACK_FLAG_DUPE) {
-        LOG_WARN("Msg ack was dupe");
+        US_LOG_WARN("Msg ack was dupe");
       }
       this->removeQueue(msgNonce);
       break;
     }
     default:
-      LOG_WARN("Unrecognized command: %d", cmd);
+      US_LOG_WARN("Unrecognized command: %d", cmd);
       this->setError(UBSUB_ERR_BAD_REQUEST);
       break;
   }
@@ -592,7 +592,7 @@ QueuedMessage* Ubsub::queueMessage(const uint8_t* buf, int bufLen, const uint64_
 
   this->queue = msg;
 
-  LOG_DEBUG("Queued %d bytes with nonce 0x%s for retry", bufLen, tohexstr(nonce));
+  US_LOG_DEBUG("Queued %d bytes with nonce 0x%s for retry", bufLen, tohexstr(nonce));
 
   return msg;
 }
@@ -602,7 +602,7 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
   QueuedMessage* msg = this->queue;
   while(msg != NULL) {
     if (msg->cancelNonce == nonce) {
-      LOG_DEBUG("Removing 0x%s from queue", tohexstr(nonce));
+      US_LOG_DEBUG("Removing 0x%s from queue", tohexstr(nonce));
       *prevNext = msg->next;
       free(msg->buf);
       free(msg);
@@ -613,7 +613,7 @@ void Ubsub::removeQueue(const uint64_t &nonce) {
     msg = msg->next;
   }
 
-  LOG_DEBUG("Unable to remove 0x%s from queue, not found", tohexstr(nonce));
+  US_LOG_DEBUG("Unable to remove 0x%s from queue, not found", tohexstr(nonce));
 }
 
 void Ubsub::processQueue() {
@@ -622,14 +622,14 @@ void Ubsub::processQueue() {
   QueuedMessage *msg = this->queue;
   while(msg != NULL) {
     if (now >= msg->retryTime) {
-      LOG_INFO("Retrying message 0x%s", tohexstr(msg->cancelNonce));
+      US_LOG_INFO("Retrying message 0x%s", tohexstr(msg->cancelNonce));
       msg->retryTime = now + UBSUB_PACKET_RETRY_SECONDS;
       msg->retryNumber++;
 
       this->sendData(msg->buf, msg->bufLen);
 
       if (msg->retryNumber >= UBSUB_PACKET_RETRY_ATTEMPTS) {
-        LOG_WARN("Retried max times, timing out");
+        US_LOG_WARN("Retried max times, timing out");
         this->removeQueue(msg->cancelNonce);
         return; // Pointer is no longer valid, abort so we don't get memory issues
       }
@@ -692,7 +692,7 @@ void Ubsub::renewSubscriptions() {
   while (sub != NULL) {
     if (now >= sub->renewTime) {
       // Renew
-      LOG_INFO("Renewing subscription to %s...", sub->topicNameOrId);
+      US_LOG_INFO("Renewing subscription to %s...", sub->topicNameOrId);
 
       sub->requestNonce = getNonce64();
       sub->renewTime = now + 5;
@@ -743,7 +743,7 @@ void Ubsub::checkWatchedVariables() {
       uint32_t hash = hash32(watch->ptr, watch->len);
       if (hash != watch->hash) {
         // There was an update!
-        LOG_INFO("Detected change in variable %s, updating...", watch->name);
+        US_LOG_INFO("Detected change in variable %s, updating...", watch->name);
         watch->hash = hash;
 
         if (watch->format == FORMAT_STRING) {
@@ -753,7 +753,7 @@ void Ubsub::checkWatchedVariables() {
         } else if (watch->format == FORMAT_FLOAT) {
           json.write(watch->name, *(float*)watch->ptr);
         } else {
-          LOG_WARN("Unable to send watched variable, unknown variable %d", watch->format);
+          US_LOG_WARN("Unable to send watched variable, unknown variable %d", watch->format);
         }
       }
     }
@@ -845,7 +845,7 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
     return -1;
   }
 
-  LOG_DEBUG("Sending %d bytes to host %s:%d...", bufSize, this->host, this->port);
+  US_LOG_DEBUG("Sending %d bytes to host %s:%d...", bufSize, this->host, this->port);
 
   #if ARDUINO
     if (this->sock.beginPacket(this->host, this->port) != 1)
@@ -863,7 +863,7 @@ int Ubsub::sendData(const uint8_t* buf, int bufSize) {
     struct hostent *server;
     server = gethostbyname(this->host);
     if (server == NULL) {
-      LOG_WARN("Failed to resolve hostname %s. Connected?", this->host);
+      US_LOG_WARN("Failed to resolve hostname %s. Connected?", this->host);
       return -1;
     }
 
@@ -935,7 +935,7 @@ void Ubsub::closeSocket() {
 }
 
 void Ubsub::syncTime(int timeout) {
-  LOG_INFO("Synchronizing time...");
+  US_LOG_INFO("Synchronizing time...");
 
   #ifdef PARTICLE
     uint64_t timeoutTime = getTime() + timeout;
@@ -946,7 +946,7 @@ void Ubsub::syncTime(int timeout) {
     configTime(0, 0, DEFAULT_NTP_SERVER);
     while(!time(NULL) && getTime() < timeoutTime) delay(50);
   #else
-    LOG_WARN("Time syncing not supported on this platform");
+    US_LOG_WARN("Time syncing not supported on this platform");
   #endif
 
   this->lastTimeSync = getTime();

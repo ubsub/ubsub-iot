@@ -41,18 +41,18 @@
   }
 
   #ifdef UBSUB_LOG_DEBUG
-    #define LOG_DEBUG(msg, ...) writeLog("DEBUG", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+    #define US_LOG_DEBUG(msg, ...) writeLog("DEBUG", __FILE__, __LINE__, msg, ## __VA_ARGS__)
   #else
-    #define LOG_DEBUG(msg, ...)
+    #define US_LOG_DEBUG(msg, ...)
   #endif
-  #define LOG_INFO(msg, ...) writeLog("INFO", __FILE__, __LINE__, msg, ## __VA_ARGS__)
-  #define LOG_WARN(msg, ...) writeLog("WARN", __FILE__, __LINE__, msg, ## __VA_ARGS__)
-  #define LOG_ERROR(msg, ...) writeLog("ERROR", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #define US_LOG_INFO(msg, ...) writeLog("INFO", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #define US_LOG_WARN(msg, ...) writeLog("WARN", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #define US_LOG_ERROR(msg, ...) writeLog("ERROR", __FILE__, __LINE__, msg, ## __VA_ARGS__)
 #else
-  #define LOG_DEBUG(msg, ...)
-  #define LOG_INFO(msg, ...)
-  #define LOG_WARN(msg, ...)
-  #define LOG_ERROR(msg, ...)
+  #define US_LOG_DEBUG(msg, ...)
+  #define US_LOG_INFO(msg, ...)
+  #define US_LOG_WARN(msg, ...)
+  #define US_LOG_ERROR(msg, ...)
 #endif
 
 #endif
