@@ -95,6 +95,37 @@ void loop() {
 }
 ```
 
+## Using the logging API
+
+As an addon to the Ubsub API, there is also a simple logging API
+to help you send out log messages to ubsub (in additional to serial/stdout).
+
+### Configuration
+```
+ULOG_DISABLE        Disable all logging if defined (macro to nothing)
+ULOG_BUF_SIZE       Override default buffer size (default: 512)
+ULOG_TOPIC          Override topic to write log messages to (default: "log")
+ULOG_SERIAL         Enable serial output (or stdout if unix)
+ULOG_DEBUG          If defined, will enable UDEBUG macro output
+```
+
+### Example
+```cpp
+#include "ubsub_log.h"
+
+void setup() {
+  initUbsubLogger("id", "key");
+
+  // If you already have an ubsub instance:
+  // initUbsubLogger(&ubsub);
+
+  ULOG("hi there %s", "name");
+  UWARN("...");
+  UERROR("...");
+  UDEBUG("...");
+}
+```
+
 # API
 
 ## Ubsub(const char* deviceId, const char* deviceKey)

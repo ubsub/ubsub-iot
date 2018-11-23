@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include "../../src/ubsub.h"
+#include "../../src/ubsub_log.h"
 
 void myMethod(const char* arg) {
   std::cout << "RECEIVED: " << arg << std::endl;
@@ -13,7 +14,11 @@ int main() {
   if (!client.connect(2)) {
     std::cout << "Failed to connect" << std::endl;
   }
+  initUbsubLogger(&client);
+  // setLoggerDeviceId("test");
   // client.enableAutoRetry(false);
+
+  UINFO("Welcome to the logging test!");
 
   client.listenToTopic("testy", myMethod);
 
@@ -26,6 +31,8 @@ int main() {
   client.setWatchTopic("iot-watches");
   client.watchVariable("other", &test);
   client.watchVariable("var", &test); // Any time this value changes, an event will be emitted
+
+  UWARN("Done with watch %d", test);
 
   while(true) {
     test++;
