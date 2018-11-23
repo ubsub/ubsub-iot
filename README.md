@@ -106,6 +106,7 @@ ULOG_DISABLE        Disable all logging if defined (macro to nothing)
 ULOG_BUF_SIZE       Override default buffer size (default: 512)
 ULOG_TOPIC          Override topic to write log messages to (default: "log")
 ULOG_SERIAL         Enable serial output (or stdout if unix)
+ULOG_DEBUG          If defined, will enable UDEBUG macro output
 ```
 
 ### Example

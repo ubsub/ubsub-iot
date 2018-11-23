@@ -6,6 +6,7 @@ ULOG_DISABLE        Disable all logging if defined (macro to nothing)
 ULOG_BUF_SIZE       Override default buffer size (default: 512)
 ULOG_TOPIC          Override topic to write log messages to (default: "log")
 ULOG_SERIAL         Enable serial output (or stdout if unix)
+ULOG_DEBUG          If defined, will enable UDEBUG macro output
 **/
 
 #ifndef ubsub_log_h
@@ -92,7 +93,9 @@ ULOG_SERIAL         Enable serial output (or stdout if unix)
   #define UINFO(msg, ...)  writeULog("INFO", __FILE__, __LINE__, msg, ## __VA_ARGS__)
   #define UWARN(msg, ...)  writeULog("WARN", __FILE__, __LINE__, msg, ## __VA_ARGS__)
   #define UERROR(msg, ...) writeULog("ERROR", __FILE__, __LINE__, msg, ## __VA_ARGS__)
-  #define UDEBUG(msg, ...) writeULog("DEBUG", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #ifdef ULOG_DEBUG
+    #define UDEBUG(msg, ...) writeULog("DEBUG", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #endif
 
 #else
   // Ubsub log disabled, nullify log statements
