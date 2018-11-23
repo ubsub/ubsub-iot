@@ -95,6 +95,8 @@ ULOG_DEBUG          If defined, will enable UDEBUG macro output
   #define UERROR(msg, ...) writeULog("ERROR", __FILE__, __LINE__, msg, ## __VA_ARGS__)
   #ifdef ULOG_DEBUG
     #define UDEBUG(msg, ...) writeULog("DEBUG", __FILE__, __LINE__, msg, ## __VA_ARGS__)
+  #else
+    #define UDEBUG(msg, ...)
   #endif
 
 #else
