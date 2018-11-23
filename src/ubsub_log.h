@@ -1,11 +1,17 @@
 /**
 Ubsub log wrapper to send log events to ubsub (or other sources)
+
+Configuration:
+ULOG_DISABLE        Disable all logging if defined (macro to nothing)
+ULOG_BUF_SIZE       Override default buffer size (default: 512)
+ULOG_TOPIC          Override topic to write log messages to (default: "log")
+ULOG_SERIAL         Enable serial output (or stdout if unix)
 **/
 
 #ifndef ubsub_log_h
 #define ubsub_log_h
 
-#ifndef UBSUB_LOG_DISABLE
+#ifndef ULOG_DISABLE
 
   #if (!ARDUINO || PARTICLE)
     #include <iostream>
@@ -57,7 +63,7 @@ Ubsub log wrapper to send log events to ubsub (or other sources)
     vsnprintf(logbuf, sizeof(logbuf), msg, argptr);
     va_end(argptr);
 
-    #ifdef UBSUB_LOG_SERIAL
+    #ifdef ULOG_SERIAL
       #if ARDUINO || PARTICLE
         Serial.printf("[%s] (%s:%d) %s\n", level, filename, line, logbuf);
         Serial.flush();
