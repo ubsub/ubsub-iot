@@ -2,7 +2,7 @@
 
 Ubsub client("MyUserId", "MyUserSecret");
 
-float myGlobalVal = 0f;
+float myGlobalVal = 0.0f;
 
 void myMethod(const char* arg) {
   // Called method with argument
