@@ -181,6 +181,20 @@ Gets the last error code that has occurred in the client. `0` is no-error.
 #define UBSUB_ERR_MALLOC -2000
 ```
 
+# MiniJsonBuilder
+
+As part of the distribution, you can also include `minijson.h`, which includes a very
+primitive and memory-efficient way to build simple JSON.  This is useful when you want
+to publish multiple pieces of data in a single publish event.
+
+```cpp
+#include "minijson.h"
+
+MiniJsonBuilder builder(128); // 128 is buffer size
+builder.open().write("key", "val").write("key2", 23).write("key3", true).close();
+client.publishEvent("my-topic", builder.c_str());
+```
+
 # Compatability
 
  * Unix/Linux

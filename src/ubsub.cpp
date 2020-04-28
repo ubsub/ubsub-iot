@@ -207,8 +207,8 @@ bool Ubsub::connect(int timeout) {
 }
 
 
-int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *msg) {
-  if (topicId == NULL) {
+int Ubsub::publishEvent(const char *topicNameOrId, const char *topicKey, const char *msg) {
+  if (topicNameOrId == NULL) {
     return UBSUB_MISSING_ARGS;
   }
 
@@ -216,20 +216,24 @@ int Ubsub::publishEvent(const char *topicId, const char *topicKey, const char *m
   uint8_t command[COMMAND_LEN];
   memset(command, 0, COMMAND_LEN);
   *(uint16_t*)command = this->localPort;
-  pushstr(command+2, topicId, 32);
+  pushstr(command+2, topicNameOrId, 32);
   if (topicKey != NULL) {
     pushstr(command+34, topicKey, 32);
   }
 
   int msgLen = msg != NULL ? min(strlen(msg), UBSUB_MTU-COMMAND_LEN) : 0;
 
-  US_LOG_INFO("Publishing message to topic %s with %d bytes...", topicId, msgLen);
+  US_LOG_INFO("Publishing message to topic %s with %d bytes...", topicNameOrId, msgLen);
 
   uint8_t flag = MSG_FLAG_CREATE;
   if (this->autoRetry)
     flag |= MSG_FLAG_ACK;
 
   return this->sendCommand(CMD_MSG, flag, this->autoRetry, getNonce64(), command, COMMAND_LEN, (uint8_t*)msg, msgLen);
+}
+
+int Ubsub::publishEvent(const char* topicNameOrId, const char* msg) {
+  return this->publishEvent(topicNameOrId, NULL, msg);
 }
 
 void Ubsub::listenToTopic(const char *topicNameOrId, TopicCallback callback) {

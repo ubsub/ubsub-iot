@@ -105,7 +105,8 @@ public:
   // Send message to a given topic on ubsub. Topic does not have to belong
   // to the user.
   // The msg can either be serialized JSON OR a simple string that will be encapsulated on the server
-  int publishEvent(const char *topicId, const char *topicKey, const char *msg);
+  int publishEvent(const char *topicNameOrId, const char *topicKey, const char *msg);
+  int publishEvent(const char *topicNameOrId, const char *msg);
 
   // Listen to a given topic for events. Similar to creating a function
   // but will listen to an existing topic

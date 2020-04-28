@@ -18,6 +18,7 @@ int main() {
   client.listenToTopic("testy", myMethod);
 
   client.publishEvent("Byg2kKB3SZ", "HJ3ytS3SW", "Hi there");
+  // or: client.publishEvent("Howdythar", "bla");
   client.callFunction("test-autocreate", "hi there direct");
 
   client.flush();
